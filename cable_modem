@@ -1,0 +1,35 @@
+vim:tw=0:ts=4:enc=utf8
+----------------------------------------------------------------------------------------------------
+* 自動登入東森認證網頁
+
+
+	將下列網頁存成 .html 檔案， 以瀏覽器打開即可。
+
+	請記得修改使用者帳號及密碼
+
+<HTML>
+
+<script language='JavaScript' >
+function chk(i)
+{
+document.authform.submit();
+}
+</script>
+
+<BODY onload='chk();'>
+<form name='authform' action='http://202.178.184.2:3002/cgi-bin/authcgi_login' method='post'>
+<input type='hidden' name='sip' value='202.178.184.2'> 
+<input type='hidden' name='uip' value='當時取得的IP'> 
+<input type='hidden' name='url' value='登入後要連入的網頁'>
+<input type='hidden' name='uact' value='login'>
+<input type='hidden' name='uact_status' value='0'>
+<input type='hidden' name='jap_chk' value='1'> 
+<input type='hidden' name='jap' value='1'> 
+<input type='hidden' name='uid' size='32' value='使用者帳號' maxlength='32'>
+<input type='hidden' name='upwd' size='32' value='使用者密碼' maxlength='32'>
+</form>
+</BODY>
+</HTML>
+
+
+----------------------------------------------------------------------------------------------------

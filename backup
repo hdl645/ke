@@ -1,0 +1,128 @@
+vim:enc=utf8:tw=0:ts=4
+----------------------------------------------------------------------------------------------------
+
+* Rsync + SSH -- 讓 Server 自動異地備援也加密
+
+作者 : ADJ網路實驗室
+
+一.前言
+
+自從911事件之後...異地備援這個名稱就常聽人提起...不過就是滿少看到大家在討論...剛好這次因為有需要...不得不研究這個東西...順便看看大家都是怎樣實作異地備援的...底下是個人的一點點心得...
+
+這次主要分成三個部份...單向 Trusted SSH Authorized...Rsync...Crontab....姑且不論傳輸速度為何...以及無時差的異地備援...相信這樣的Solutions應該可以滿足一般人的需求吧...
+
+二.準備
+
+測試系統: Red Hat Linux 7.3 to Red Hat 7.3 ...Local 端需要啟動 Rsync...套件 openssh-3.4p1-1
+
+** 假設: A (10.0.0.1) 要對 B (192.168.0.1) 做異地備援
+PS:角色定位要明確...當然您要巔倒的來做也行...
+
+參考網站 : http://www.fanqiang.com/a6/b7/20010908/1305001258_b.html
+
+三.開始實作
+
+
+1.完成單向Trusted SSH Authorized﹕
+我要 A (10.0.0.1) 要對 B (192.168.0.1) 做異地備援 ...所以我針對 A 讓它使用SSH連到 B 時...不需要輸入密碼...User 是 Root...SSH Version2的版本..首先要先在A(10.0.0.1)產生public/private dsa key pair..
+
+[root@mondeo home]# cd /root/.ssh/
+[root@mondeo .ssh]# ssh-keygen -d
+Generating public/private dsa key pair.
+Enter file in which to save the key (/root/.ssh/id_dsa):
+Enter passphrase (empty for no passphrase): <-- 此處不打passphrase..下次才不會詢問password
+Enter same passphrase again:
+Your identification has been saved in /root/.ssh/id_dsa.
+Your public key has been saved in /root/.ssh/id_dsa.pub.
+The key fingerprint is:
+11:22:33:44:55:66:77:88:99:00:11:22:33:44:55:66 root@mondeo.adj.idv.tw
+[root@mondeo .ssh]#
+
+這時會在系統下看到兩個檔案...id_dsa與id_dsa.pub 現在要把id_dsa.pub丟到192.168.0.1 並且更名為 authorized_keys2
+
+[root@mondeo .ssh]# scp id_dsa.pub 192.168.0.1:/root/.ssh/authorized_keys2
+root@192.168.0.1's password:
+id_dsa.pub 100% |***************************************************************************| 612 00:00
+[root@mondeo .ssh]#
+
+現在您可以執行ssh 192.168.0.1 看看能否登入而不需要輸入密碼...
+
+2.使用rsync 做Remote sync﹕
+
+rsync特性簡介 :
+
+rsync是unix-like系統下的數據鏡像備份工具，從命名上就可以看出來了remote sync。它的特性如下：
+
+1、可以鏡像保存整個目錄樹和文件系統。
+2、可以很容易做到保持原來文件的權限、時間等等。
+3、無須特殊權限即可安裝。
+4、優化的流程，文件傳輸效率高。
+5、可以使用rcp、ssh等方式來傳輸文件，當然也可以通過直接的socket連接。
+6、支持匿名傳輸。
+
+首先要先對B(192.168.0.1)把Rsync的Server on起來...
+
+[root@linux /]#chkconfig --list rsync
+rsync off
+[root@linux /]#chkconfig rsync on
+
+現在我先在A(10.0.0.1)上建一個 Backup directory...然後對B(192.168.0.1)的mysql跟html的目錄做異地備援...偶寫一個簡單的script如下:
+
+[root@mondeo /]# mkdir backup
+[root@mondeo backup]#vi sync
+
+rsync -avlR --delete -e ssh 192.168.0.1:/var/lib/mysql /backup/
+rsync -avlR --delete -e ssh 192.168.0.1:/var/www/html /backup/
+[root@mondeo backup]#chmod 700 sync
+
+參數意義如下﹕
+
+-a, --archive
+It is a quick way of saying you want recursion and want to preserve almost everything.
+-v, --verbose
+This option increases the amount of information you are given during the transfer.
+-l, --links
+When symlinks are encountered, recreate the symlink on the destination.
+-R, --relative
+Use relative paths. 保留相對路徑...才不會讓子目錄跟 parent 擠在同一層...
+--delete
+是指如果Server端刪除了一文件，那客戶端也相應把這一文件刪除，保持真正的一致。
+-e ssh
+建立起加密的連接。
+
+參數的使用因人而異...您可以man rsync來使用更多的參數...
+
+測試看看:
+
+[root@mondeo backup]# ./sync
+
+receiving file list ... done
+.
+.
+.
+done
+wrote 16 bytes  read 107 bytes  82.00 bytes/sec
+total size is 0  speedup is 0.00
+receiving file list ... done
+.
+.
+.
+done
+wrote 16 bytes  read 921 bytes  624.67 bytes/sec
+total size is 308331  speedup is 329.06
+[root@mondeo backup]#
+
+看到沒詢問密碼....以及有把檔案copy過來就沒問題囉....當然你可以把遠端的資料做個變動...看是否真有同步啦....
+
+3.使用crontab 來做自動排程﹕
+
+現在設好之後...我希望每天的0點0分...夜深人靜的時後再來幫我做sync....當然您想要多久做 sync 看個人需求囉...
+
+[root@mondeo backup]# crontab -e
+0 0 * * * /backup/sync
+
+如此一來..算是大功告成了...原則上您已具備自動加密異地備援囉....趕緊找兩台機器來試試吧...
+
+以上只是個人測試結果...如有錯誤...煩請指教!!!
+
+----------------------------------------------------------------------------------------------------

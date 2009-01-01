@@ -1,0 +1,265 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 備份的方法 3 : 使用 rsync (全自動網路備份法)
+
+URL: http://linux.tnc.edu.tw/techdoc/rsync.htm
+
+by OLS3 (ols3@www.tnc.edu.tw) 2002/10/18
+
+(本文可自由取用, 唯不可轉載使用於商業營利用途.)
+
+一. 簡介
+
+rsync 本來是用以取代 rcp 的一個工具, 它目前是由 rsync.samba.org 維護.
+
+rsync 使用所謂的 "rsync 演算法", 提供一個非常快速的檔案傳輸方法, 使 local 和遠端二部主機之間的檔案達到同步, 它主要是傳送二個檔案的異動部份, 而非每次都整份傳送, 因此速度相當地快.
+
+由於 rsync 可以搭配 rsh 或 ssh 甚至使用 daemon 模式, 因此許多人拿 rsync 當做一個優異的備份工具來使用. (拿來 update ISO 檔也很好用)
+
+本文將簡單介紹運用 rsync 備份網路主機檔案的基本方法, 供各位伙伴參考.
+
+rsync 有 6 種不同的用法, 如 local 拷貝備份, local 檔案藉由 rsh/ssh 傳送至遠方主機.... 在此我們主要介紹 rsync 的 daemon 模式.
+
+首先, 先給個簡單的定義: 如果一台主機跑 rsync daemon 模式, 我們就稱這台機器為一 rsync Server, 或者說這台主機是一台備份主機( Backup Server).
+
+備份主機會開啟一個 873 的服務通道(port), 等待對方 rsync 連接.
+
+連接時, rsync Server 會檢查密碼是否相符, 若通過密碼查核, 則開始進行檔案傳輸.
+
+第一次連通完成時, 會把整份檔案傳輸一次, 下一次就只傳送二個檔案之間異動的部份.
+
+rsync client (欲加以備份的網路主機) 和 rsync server 的運作方式, 如下圖所示:
+
+藉由上述方法, 我們可以設立多部備份主機, 使網路主機上重要的檔案能分散至數部主機中, 以分散風險.
+
+一旦完成備份, 我們可以對這些備份主機再做進一步的儲存動作, 如使用 tar 或 Ghost , 把檔案備份到更穩固,更能長久保存的設備上, 如 MO 或 燒錄設備.
+
+以上, 便是整個運作的想法, 底下, 我們來加以實作.
+
+ 
+
+二. 安裝法
+
+rsync 目前最新版是 2.5.5, 可以到 rsync.samba.org 或 敝中心 FTP 下載.
+
+安裝 rsync 十分簡單, 以下這道指令即可搞定:
+
+./configure && make && make install
+
+若您使用 rpm 套件, 只要下 rpm -ivh rsync*.rpm 即可
+
+它的設定檔位置在 /etc/rsyncd.conf
+
+其實 RedHat / Mandrake 等 Linux 套件, 預設值都已幫各位安裝好 rsync 了.
+
+ 
+
+三. 設定 rsync server: (假設這台主機名稱為 bk.xxx.edu.tw)
+
+rsync server 端要設定以下四項:
+
+   1. 規劃建立備份目錄區
+   2. 設定: /etc/xinetd.d/rsync
+   3. 設定: /etc/rsyncd.conf
+   4. 設定: 密碼檔
+
+依次說明如下:
+
+1. 規劃建立備份目錄區:
+
+建議您準備一個容量較大且獨立的分割區, 並在其中開好備份目錄, 如此 /bk/server
+
+2. 設定 /etc/xinetd.d/rsync, 簡單範本如下:
+
+# default: off
+# description: The rsync server is a good addition to am ftp server, as it \
+#       allows crc checksumming etc.
+service rsync
+{
+        disable = no
+        socket_type     = stream
+        wait            = no
+        user            = root
+        server          = /usr/bin/rsync
+        server_args     = --daemon
+        log_on_failure  += USERID
+}
+
+
+然後下 service xinetd restart, 使上述設定生效.
+
+上述, 主要是要打開 rsync 這個 daemon, 一旦有 rsync client 要連接時, xinetd 會把它轉介給 rsyncd (跑 port 873).
+
+ 
+
+3. 設定 /etc/rsyncd.conf :
+
+以下區塊, 代表開放給某一台 rsync client 主機的設定, 簡單範本如下:
+
+
+    [mch1]
+    path = /bk/server/mch1_backup
+    auth users = mch1_backup
+    uid = root
+    gid = root
+    secrets file = /etc/rsyncd.secrets
+    read only = no
+
+
+比較重要的解釋:
+
+[mch1] 代表欲備份的主機代號, 名稱可自訂.
+
+path 用來設定備份檔案要存放在那一個目錄? 請先用 mkdir 開設好, 名稱可自訂.
+
+auth users 代表授權的帳號, 名稱可自訂.
+
+secrets file 代表儲存帳號密碼的密碼檔, 其放置的路徑檔名.
+
+當然, 這台備份主機, 可以容納許多 rsync client 連接, 只要在 rsyncd.conf 中設妥對應的區塊即可.
+
+換言之, 以下範本, 代表二個主機 mch1 及 mch2 欲備份進來:
+
+    [mch1]
+    path = /bk/server/mch1_backup
+    auth users = mch1_backup
+    uid = root
+    gid = root
+    secrets file = /etc/rsyncd.secrets
+    read only = no
+    
+    [mch2]
+    path = /bk/server/mch2_backup
+    auth users = mch2_backup
+    uid = root
+    gid = root
+    secrets file = /etc/rsyncd.secrets
+    read only = no
+
+4. 設定密碼檔:
+
+rsyncd.secrets 的內容很簡單, 格式為 帳號:密碼
+
+如以下例子:
+
+mch1_backup:ILoveOLS3
+
+注意! 上述設定只是一個範例, 請務必自訂一組, 千萬不要直接套用.
+
+接下來, 要將 rsyncd.secrets 這個密碼檔的檔案屬性設為 root 擁有, 且權限要設為 600, 否則無法備份成功!
+
+因此, 請下:
+
+    * chown root.root rsyncd.secrets
+    * chmod 600 rsyncd.secrets
+
+至此, rsync server 這端已設定完成, 若欲查看備份記錄, 可參考 /var/log/rsyncd.log 這個檔案.
+
+接下來是 client 端(即欲備份的網路主機) 的設定.
+
+ 
+
+四. 設定 rsync client (假設這台主機 IP 為 : 11.22.33.44)
+
+步驟:
+
+   1. 設定密碼檔
+   2. 測試 rsync 執行指令
+   3. 將 rsync 指令放入工作排程 (crontab)
+
+另外, 假設 mch1 這台主機是網路主機, 今打算把 /usr/local/apache 這個目錄加以備份至 backup server (bk.xxx.edu.tw),
+
+但不想備份記錄檔(也就是說要把 logs 目錄排除), 整個操作方式如下:
+
+1. 假設把密碼檔放在 /root/rsyncd.secrets, 內容只要含有密碼一行即可:
+
+ILoveOLS3
+
+注意: rsyncd.secrets 的權限屬性必須設為 600
+
+2. 測試指令是否可以成功?
+
+/usr/bin/rsync -rvlHpogDtS --password-file=/root/rsyncd.secrets /usr/local/apache --exclude apache /logs mch1_backup@bk.xxx.edu.tw::mch1
+
+若出現傳輸目錄檔案的畫面, 即表示測試成功.
+
+3. 置入工作排程, 假設每天凌晨 5 點開始備份:
+
+crontab -u root -e
+
+0 5 * * * /usr/bin/rsync -rvlHpogDtS --password-file=/root/rsyncd.secrets /usr/local/apache --exclude apache /logs mch1_bakup@bk.xxx.edu.tw::mch1
+
+若您有其它目錄(如 /home)要備份, 則如法泡製:
+
+20 5 * * * /usr/bin/rsync -rvlHpogDtS --password-file=/root/rsyncd.secrets /home mch1_bakup@bk.xxx.edu.tw::mch1
+
+若您覺得備份一台 Backup Server 不夠, 可再按上述方法, 自行增加任意多台 Backup Server, 以分散風險!
+
+像這樣把備份的工作全部自動化, 真是輕鬆愉快, 大大地減低備份工作煩人的壓力!!
+
+五. 安全性:
+
+建議使用 ipchains 或 iptables 指令, 來限制 rsync client 的連線範圍, 例子如下:
+
+ipchains -A input -p tcp -s ! 11.22.33.44 --dport 873 -j DENY
+
+或
+
+iptables -A INPUT -p tcp -s ! 11.22.33.44 --dport 873 -j DROP
+
+如此, 只有 11.22.33.44 這個 client IP 能連入這台 rsync server.
+
+ipchains 及 iptables 的用法, 可參考小弟寫的這份講義: Linux防火牆入門
+
+另, rsync 可以結合 ssh 或 ssh2, 使安全性更加提高. 詳情請自行查閱 rsync / ssh / ssh2 的 manpage.
+
+六. 參考文件:
+
+rsync 的一些備份妙法, 請參考: http://rsync.samba.org/examples.html
+
+rsync 的教學文件: A Tutorial on Using rsync
+
+rsync 的 FAQ
+
+ 
+
+七. 可能會遇到的疑難問題:
+
+1. Q: 出現以下這個訊息, 是怎麼一回事?
+
+@ERROR: auth failed on module xxxxx
+rsync: connection unexpectedly closed (90 bytes read so far)
+rsync error: error in rsync protocol data stream (code 12) at io.c(150)
+
+A: 這是因為密碼設錯了, 無法登入成功, 請再檢查一下 rsyncd.secrets 中的密碼設定, 二端是否一致?
+
+2. Q: 出現以下這個訊息, 是怎麼一回事?
+
+password file must not be other-accessible
+
+continuing without password file
+
+Password:
+
+A: 這表示 rsyncd.secrets 的檔案權限屬性不對, 應設為 600
+
+請下 chmod 600 rsyncd.secrets
+
+3. Q: 出現以下這個訊息, 是怎麼一回事?
+
+@ERROR: chroot failed
+rsync: connection unexpectedly closed (75 bytes read so far)
+rsync error: error in rsync protocol data stream (code 12) at io.c(150)
+
+A: 這通常是您的 rsyncd.conf 中
+的 path 路徑所設的那個目錄並不存在所致.
+請先用 mkdir 開設好備份目錄.
+
+ 
+
+希望這份講義對台南縣中小學能有所助益....
+
+Written by OLS3 All right reserved. 2002/10/18
+
+----------------------------------------------------------------------------------------------------

@@ -1,0 +1,40 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+受到Edward大哥新文章的激勵...
+讓我又拾起信心決定要學好latex了...
+
+用apt裝好的cjk-latex好像不能用的樣子
+每次要編譯一分文件出來都會有錯誤
+應該是字型的問題吧...
+我找到一些文件研究要怎麼新增字型,先跟大家分享一下
+
+先把ttf字型連結或複製到/usr/share/texmf/fonts/truetype/下
+代碼:
+ln -s /usr/share/fonts/truetype/arphic/bkai00mp.ttf /usr/share/texmf/fonts/truetype/
+
+然後在/usr/share/texmf/fonts/tfm/chinese下
+代碼:
+mkdir bkai00mp
+cd bkai00mp
+ttf2tfm bkai00mp bkai00mp@Big5@
+
+然後在/usr/share/texmf/tex/latex/CJK/Bg5/下新增文件c00bkai.fd
+-------------------------------------------------
+def\filedate{2003/12/19}
+\ProvidesFile{c00bsmi.fd}[\filedate]
+
+\DeclareFontFamily{C00}{bkai}{\hyphenchar \font\m@ne}
+
+\DeclareFontShape{C00}{bkai}{m}{n}{<-> CJK * bkai00mp}{}
+\DeclareFontShape{C00}{bkai}{bx}{n}{<-> CJKb * bkai00mp}{\CJKbold}
+
+\endinput
+-------------------------------------------------
+
+最後執行texhash或mktexlsr
+
+然後就可以在文件裡用bkai這個字型了
+終於讓bg5latex可以轉出正確的文件了...
+
+----------------------------------------------------------------------------------------------------

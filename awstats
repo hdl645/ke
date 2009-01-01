@@ -1,0 +1,126 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+[文章]Multi-Domain 訪客流量分析加強版 -- Awstats 5.0  引言回覆
+如果你玩過 webalizer...那你可能會認為玩得不夠...因為一旦跟 Awstats 比較起來...可以說是小屋見大屋...這套軟體它的特色很多...而且 Install 說明也寫的很好...相信看完說明大家應該都可以裝的起來才對..
+
+不過他有一個缺點...那就是硬體要夠強...以 500MB 的 Log 檔來分析的話...在 AMD Athlon 1.2G and 512MB SDRAM 下...需要大概三分鐘的時間才能跑完...要是做 Multi-Domain 的話..那也可以...不過機器太慢...跑起來會很吃力就是...當然如果你不想這樣辛苦的話...裡面也有設定說可以讓你 Run 完之後就清掉 Log 或是 把它另存別的地方...讓這樣來加快它的速度...
+
+而我們這次的目地也是要玩 Multi-Domain 的訪客流量分析...目前市面上有些主機代管的公司就是利用這套來計算使用的流量...相當的好用...而這邊我們要接著上一篇的設定--讓 Webalizer 幫你分析 Multi-Domain 訪客資料--我們將延用相同的 Apache 設定...
+
+ScreenShot:
+
+
+所需資料(這兩個 Viutual-Domain):
+http://www.adj.idv.tw
+http://demo.adj.idv.tw/virtual.php
+
+完成結果參考如下:
+http://www.adj.idv.tw/cgi-bin/awstats.pl?config=adj
+http://www.adj.idv.tw/cgi-bin/awstats.pl?config=demo
+
+Download Source:
+http://awstats.sourceforge.net/
+
+安裝步驟如下(原始 Document 寫的很清楚...建議參考裡面寫的):
+Step 1 : Install and Setup
+
+* Step 1-1
+Configure your apache web server to have NCSA combined/XLF/ELF log format (you can use your own log format but this predefined logformat is often the best choice and make setup easier). You can do this by changing, in httpd.conf, following directives (See your apache manual for more information):
+代碼:
+
+CustomLog /yourlogpath/yourlogfile common
+into
+CustomLog /yourlogpath/yourlogfile combined
+
+
+* Step 1-2
+Copy the contents of the uncompressed cgi-bin folder from your hard drive to your server's cgi-bin directory (this includes awstats.pl, awstats.model.conf, and the lang, lib and plugins sub-directories).
+代碼:
+
+#cp -rpf wwwroot/cgi-bin/* /var/www/cgi-bin
+
+
+* Step 1-3
+If necessary (should not with most Perl interpreter), edit the first (top-most) line of awstats.pl file that is
+代碼:
+
+#!/usr/bin/perl
+to reflect the path were your Perl interpreter is installed. Default value works for most of Unix OS, but it also might be
+#!/usr/local/bin/perl
+With Apache for Windows and ActivePerl interpreter, it might be
+#!c:/program files/activeperl/bin/perl
+
+
+* Step 1-4
+Move AWStats icon sub-directories and its content into a directory readable by your web server, for example /yourwwwroot/icon or /yourwwwroot/icons.
+代碼:
+
+#cp -rpf icon/* /var/www/html
+
+
+* Step 1-5
+Copy awstats.model.conf file into a new file named awstats.myvirtualhostname.conf. Note:
+When you will run AWStats, it will first look for a config file named
+awstats.myvirtualhostname.conf (if not found, will look for awstats.conf).
+Whatever the name you choose, this new file must be stored in
+- /etc/opt/awstats or /etc/awstats or /etc or same directory than awstats.pl (so cgi-bin)
+代碼:
+
+for Unix/Linux users.
+在這邊我建立兩個檔案-- awstats.adj.conf and awstats.demo.conf on /var/www/cgi-bin/ --
+
+
+* Step 1-6
+Edit this new config file with your own setup :
+代碼:
+
+#vi /var/www/cgi-bin/awstats.adj.conf
+修改這幾個地方成為
+LogFile="/var/log/httpd/main/access_log"
+SiteDomain="www.adj.idv.tw"
+Lang="tw"
+...
+參數實在太多...請參考Readme
+
+#vi /var/www/cgi-bin/awstats.demo.conf
+LogFile="/var/log/httpd/demo/access_log"
+SiteDomain="demo.adj.idv.tw"
+Lang="tw"
+
+
+Step 2 : Build/Update Statistics
+* Step 2-1
+The first analyze/update of statistics can be made the first time manually from the command line (the first time, process may be long) :
+代碼:
+
+#/var/www/cgi-bin/awstats.pl -config=adj -update
+#/var/www/cgi-bin/awstats.pl -config=demo -update
+
+結果輸出大概如下
+When update is finished, you should get a result like this:
+Lines in file: 225730
+Found 5 dropped records,
+Found 124 corrupted records,
+Found 0 old records,
+Found 225601 new records.
+
+
+* Step 2-2
+You can add instructions in your crontab (Unix/Linux) or your task scheduler (for Windows), to launch frequently this Awstats update process.
+代碼:
+
+#crontab -e
+新增這兩行..我想要每8個小時執行一次
+0 */8 * * * /var/www/cgi-bin/awstats.pl -config=adj -update
+5 */8 * * * /var/www/cgi-bin/awstats.pl -config=demo -update
+
+
+Step 3 : Read Statistics
+現在...Open Your Browser...輸入這樣就可以看到辛苦的成果囉...
+http://www.adj.idv.tw/cgi-bin/awstats.pl?config=adj
+http://www.adj.idv.tw/cgi-bin/awstats.pl?config=demo
+
+終於大功告成...由於這個實在功能強大...因此安裝會比較不容易...不過一但裝起來...就會滿有成就感的囉...
+
+----------------------------------------------------------------------------------------------------

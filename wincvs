@@ -1,0 +1,34 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 讓WINCVS支援SSH
+
+	1. 去 http://telia.dl.sourceforge.net/sourceforge/sfsetup/ssh-1.2.14-win32bin.zip 下載SSH。
+	2. 將該檔案解到要放SSH的目錄。
+	3. 設定HOME環境變數。若是98、ME系列需重新開機。
+	4. 再來會出現一個CONSOLE視窗，沒有任何訊息。直接輸入密碼即可連線，但是想不透為什麼KEY沒有發生作用。
+
+2003/6/9 補充
+
+	要讓KEY發生作用，除了要依照sourceforge.net的cvsgui專案找到的WinCVS-SSH-Guide.pdf做好鑰匙檔案外，還要執行下列步驟：
+	
+	1. 設定一個名為HOME的環境變數
+	2. 在%HOME%目錄之下先手動執行SSH，記得要把鑰匙（identity檔案)放到%HOME%\.ssh目錄之下。等手動連線過SSH後，會記載到known_host之中。
+	3. WinCVS Admin/Preference/General/Authentication/Settings/RSA private key file/ 指定為[HOME]\.ssh\identity
+	4. WinCVS Admin/Preference/CVS或WinCVS/的HOME目錄指定到與%HOME%同目錄。
+	大致上就這樣，若還有遺漏處請參考WinCVS-SSH-Guide.pdf
+	
+----------------------------------------------------------------------------------------------------
+
+* 使用 WinCVS import 專案時注意事項
+
+	在 Linux 下使用CVS是先進到被 import 的目錄之中再執行命令。但是， WINCVS 是在左方的視窗選定該目錄直接 import，不需要再把滑鼠移到右方視窗點一下。否則只有該目錄下第一個目錄下所有檔案會被 import，而且目錄的層級也不對了（因為WINCVS會認為你要import第一個目錄）。
+
+----------------------------------------------------------------------------------------------------
+
+* update 的 -d 參數
+
+	update 時請勾選 Create mission directories that exist in repository 才會有 -d 參數功能。該參數功能請參考說明文件或cvs.txt
+
+
+----------------------------------------------------------------------------------------------------

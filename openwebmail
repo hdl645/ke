@@ -1,0 +1,292 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+ 轉貼自:Openwebmail 的進階設定
+
+Sendmail.cf 的修改
+為了安全的考量, 某些系統上的 sendmail.cf 內定只聽在 127.0.0.1 這個 IP, 所以 sendmail 只接受 local 的連線 (即 local 的程式可以送信出去), 但是卻無法接收 remote 端的連線(即無法接受 remote 送來的信件). 如果您的機器發生這樣的情形, 解決步驟如下:
+
+開啟 sendmail.cf, 找到 下列部分
+
+# SMTP daemon options
+O DaemonPortOptions=Port=smtp,Addr=127.0.0.1, Name=MTA
+
+將 127.0.0.1 改成 0.0.0.0 讓 sendmail 聽在這部機器所有的 IP 上.
+
+# SMTP daemon options
+O DaemonPortOptions=Port=smtp,Addr=0.0.0.0, Name=MTA
+
+kill -1 pid_of_sendmail
+
+讓 Open WebMail 成為 Server 預設的網頁
+建立一個 index.html 檔案, 內容如下 a 或 b 皆可
+
+a.
+<html><head>
+<meta http-equiv="Refresh"
+content="0;URL=http://your_server/cgi-bin/openwebmail/openwebmail.pl">
+</head></html>
+
+b.
+<html>
+<body onload=
+"window.open('http://your_server/cgi-bin/openwebmail/openwebmail.pl','_top')">
+</body>
+</html>
+
+然後將 index.html 拷貝到 http server 的 document root,
+
+ps: 以 FreeBSD 來說, 會在 /usr/local/www/data, 以 Linux/RedHat 來說, 會在 /var/www/html
+
+
+預設使用中文圖示
+Open WebMail 內建有許多套的圖示 (iconset), 不過預設用的是不含中文的 Default iconset. 目前含有中文的 iconset 有 Default.Chinese.Triditional, Cool3D.Chinese.Traditional 和 Cool3D.Chinese.Simplified 這三套.
+
+例如要預設使用 Cool3D.Chinese.Traditional iconset 的話, 請在 openwebmail.conf 加上下面這行
+
+default_iconset Cool3D.Chinese.Traditional
+
+
+關於病毒郵件
+有越來越多的病毒都是透過電子郵件進行感染與散佈, 基本上都是
+
+使用者收到一封含有電腦病毒附件的電子郵件
+使用者基於好其打開病毒附件, 或是郵件經過設計, 一開啟郵件就連帶自動開啟病毒附件
+附件是病毒檔, 對郵件系統進行感染
+以這個使用者的郵件系統為基地, 透過其通訊錄或看過的網頁尋找下一個收件人, 寄出病毒郵件給他們
+如果使用者用的是 WebMail, 上述的第 4 點是不會發生的, 因為 WebMail 本身系統並不在使用者的電腦上, 但是仍有可能發生 2, 3 的情形. 在目前使用者多有警覺心的情況下, 大部分病毒都設計成不需要經由使用者點選附件, 只要開啟郵件就會發生中毒的情形. Open WebMail 針對此點特別設計, 凡是這類的病毒附件被下載時都會被改名為 .txt 檔案避免附件被系統執行.
+
+
+關於郵件過濾
+雖然說用 openwebmail 看信不必擔心中毒的問題, 但是如果信箱總是有一堆垃圾信/病毒信的話, 看起來還是很煩的. openwebmail 除了靜態的郵件規則外, 另外有三組動態的過濾器可以用來過濾垃圾信或是病毒信件
+
+濾偽造來源端的信件：(fakedsmtp filter)
+這個 filter 會檢查信件的發信主機 (SMTP server) 是否試圖在隱藏或偽造他的名字, 如果是的話就將信件移到垃圾桶, 這個 filter 可以用來過濾大部份的垃圾信 (不過少數時候會將正常的信件也過濾到垃圾筒)
+
+過濾偽造寄件人地址的信件：(fakedfrom filter)
+每封 Email 在發送的時候, 會像真實世界的郵件一樣, 有所謂的信封與信件本身兩個部分. 這個 filter 會檢查信封的發信人與信件的發信人是否有不合的情形, 如果就將信件移到垃圾桶. 許多的垃圾信與病毒產生的郵件都是屬於這類
+
+過濾偽造 EXE 附件型態的信件： (fakedexecontenttype filter)
+電子郵件病毒原本只有在使用者打開信件中屬於可執行檔的附件時，才會感染病毒。但是新近出現的一些電子郵件病毒卻能作到只要使用者開啟這封郵件就會中毒，讓使用者聞毒色變 . 這個 filter 會過濾這類的信件, 將其移到垃圾桶.
+
+三個 filter 在 openwebmail.conf.default 中內定是關閉的, 分別是
+
+default_filter_fakedsmtp no
+default_filter_fakedfrom no
+default_filter_fakedexecontenttype no
+
+管理者如果要將其設定成預設是開啟的話, 請將上述的 no 改成 yes, 加到 openwebmail.conf中, 這樣對於新的使用者 filter 內定就會是開啟的狀態, 不過使用者仍可以分別在自己的 個人偏好設定中作不同的設定
+
+註: 建議 default_filter_fakedexecontenttype 一定要開, 可以過濾掉大部分的郵件病毒
+
+註: 投影片 mail-filter.ppt
+
+
+命令列工具 openwebmail-tool.pl
+由於 Open WebMail 的 filter 是在使用者透過 Open WebMail 讀信後才開始動作, 所以可能會發生使用者透過 finger 去檢查說有新信, 但是進入 WebMail 後卻一封也沒有, 因為全部是垃圾或病毒信. openwebmail-tool.pl 可以被當作是 finger 的替代品, 他會在做完信件過濾還才開始回報信箱的狀態.
+
+部分系統的 fingerd 允許管理者透過 -p 參數指定一支外部程式來作信件狀態的檢查, 這時候可以拿 openwebmail-tool.pl 作為信箱檢查程式
+
+以 FreeBSD 為例, 修改 /etc/inetd.conf
+
+#finger stream tcp nowait/3/10 nobody /usr/libexec/fingerd fingerd -s
+
+改成
+
+finger stream tcp nowait/3/10 nobody /usr/libexec/fingerd fingerd -s -p /usr/local/www/cgi-bin/openwebmail/openwebmail-tool.pl
+以 Linux 為例, 修改 /etc/xinetd.d/finger
+
+service finger
+{
+socket_type = stream
+wait = no
+user = nobody
+server = /usr/sbin/in.fingerd
+disable = yes
+}
+
+改成
+
+service finger
+{
+socket_type = stream
+wait = no
+user = nobody
+server = /usr/sbin/in.fingerd
+server_args = -p /var/www/cgi-bin/openwebmail/openwebmail-tool.pl
+}
+
+
+openwebmail-tool.pl 也可以被用在定期幫使用者作信件匣 index 檢查或是抓 POP3 外部信件, 只要在 crontab 中加入
+
+59 23 * * * /usr/local/www/cgi-bin/openwebmail/openwebmail-tool.pl -a -p -i -q
+
+會在每天晚上 11:59 檢查所有使用的的信件匣 index, 並且替使用者抓外部信件
+
+
+如果您希望使用行事曆中的外部 Email 通知功能的話, 您也需要在 crontab 中執行 openwebmail-tool.pl
+
+0 */2 * * * /usr/local/www/cgi-bin/openwebmail/openwebmail-tool.pl -a -n -q
+
+上面這行會讓 openwebmail-tool.pl 每 2 個小時檢查一次使用者的行事曆, 看看接下來的一段時間裡 ( 時間長度由 openwebmail.conf 中的 calendar_email_notifyinterval 選項所決定, 內定是 120 分鐘) 是否使用者有事情要去辦
+
+註: 很明顯地, crontab 中的設定要和 calendar_email_notifyinterval 配合, 建議 calendar_email_notifyinterval 應該要比 crontab 中長一個小時或相等
+
+
+公用通訊錄, 公用郵件規則, 公用行事曆
+目前 Open WebMail 對於公用的通訊錄/郵件規則/行事曆 的支援還非常的原始, 需要管理者手動去修改. 如果管理者希望透過 Web 介面設定的話, 步驟如下
+
+建立一個管理公用 通訊錄/郵件規則/行事曆 的帳號, 例如 global
+
+
+以 global 登入 unix
+mkdir mail
+
+
+ln -s 公用通訊錄檔名 ~global/mail/.address.book
+ln -s 公用郵件規則檔名 ~global/mail/.filter.book
+ln -s 公用行事曆檔名 ~global/mail/.calendar.book
+
+註: 要注意 公用通訊錄/郵件規則/行事曆 檔案的權限. 要讓 global 這個使用者可以寫入, 而其他使用者可以讀取
+
+以 global 登入 openwebmail, 修改其個人通訊錄/郵件規則/行事曆 即代表 修改公用通訊錄/郵件規則/行事曆
+
+
+自動回信
+Open WebMail 的自動回信功能, 是透過讓 Transpoort Agent (如 sendmail) 檢查 ~/.forward 這個檔案, 然後呼叫 vacation.pl 這個程式來完成的. 在部分的機器上, 為了安全的考量, Transport Agent 透過 smrsh 執行外部程式, 限定只有特定的程式可以被呼叫, 這時我們需要在 /etc/smrsh/ 放入一個vacation.pl 的連結, 這樣自動回信功能才能正常動作
+
+以 Linux Redhat 7.x 為例
+
+cd /etc/smrsh
+ln -s /var/www/cgi-bin/openwebmail/vacation.pl .
+
+如果您碰到自動回信功能不能正常動作的情形, 可以利用 vacation.pl 中的 -d 這個選項除錯
+
+選定某位使用者, 登入 openwebmail, 在個人偏好設定中, 啟動自動回信功能
+編輯使用者 home 目錄下的 .forward 這個檔案, 在 vacation.pl 的後面加入 -d 這個參數
+寄一封信給這個使用者, 測試自動回信功能
+檢查 /tmp/vacation.debug 以找出可能的錯誤原因
+
+
+虛擬主機
+當您在同一部主機上設立多個虛擬主機時, 您只需要安裝一套 Open WebMail 就可以同時讓所有的虛擬主機都有 WebMail 的功能. Open WebMail 上允許您替每一個虛擬主機準備一個 設定檔, 所以每一部虛擬主機都可以有自己的設定, 包括 domainname, auth_module, quota limit, mailspooldir 等等
+
+舉例而言, 要替虛擬主機 sr1.domain.com 作設定
+
+cd cgi-bin/openwebmail/etc/sites.conf/
+cp ../openwebmail.conf sr1.domain.com
+依虛擬主機 sr1.domain.com 的需要, 修改檔案 sr1.domain.com 中的選項
+
+
+使用者別名
+Open WebMail 可以根據 sendmail virtusertable 格式的檔案的內容, 建立使用者別名. 比如說使用者登入的是 john@somedomain 這個帳號, 但是對應到系統裡頭卻是 tom@domain2. 關於 sendmail virtusertable 的設定方式, 請參考 http://www.sendmail.org/virtual-hosting.html
+
+舉例而言, 假設您的主機原本的 domainname 是 mail.domain.com, 在上面有 use1, user2., user3 這三位使用者, 因而他們的 email address 是 user1@mail.domain.com, user2@mail.domain.com, user3@mail.domain.com. 現在您因為需要, 再同一部主機上設立了一個虛擬主機 mail.virtualdomain.com, 然而這個 domain 上也有一個 user1. 為提示同一部 unix 機器只能有一個 user1 帳號. 這時候我們可以透過 virtusertable 將 user1@mail.virtualdomain.com 對應到 user4@mail.domain.com, 但是使用者 user1@mail.virtualdomain.com 卻完全不知道他用的是 user4@mail.domain.com
+
+讓 sendmail 同時承認並收取 mail.domain.com, mail.virtualdomain.com的信件
+找到 /etc/mail/sendmail.cf 中 Fw-o 開頭的這一行, 記取其後的檔案名稱 (一般是 /etc/mail/local-host-names)
+修改 /etc/mail/local-host-names, 加入這兩個 domain 的名字
+
+mail.domain.com
+mail.virtualdomain.com
+
+
+將 user1@mail.virtualdomain.com 對應到 user4@mail.domain.com
+修改 /etc/mail/virtusertable, 加入下列內容
+
+user1@mail.virtualdomain.com user4@mail.domain.com
+
+
+讓 sendmail 重讀設定檔
+
+kill -1 pid_of_sendmail
+
+
+當 user1@mail.virtualdomain.com 要登入 openwebmail 時, 應該
+連線 http://mail.virtualdomain.com/cgi-bin/openwebmail/openwebmail.pl, 以 user1 登入
+openwebmail 會根據 virtusertable 內容, 轉為使用 user4 這個 unix 帳號
+
+當 user1@mail.domain.com 要登入 openwebmail 時, 應該
+連線 http://mail.domain.com/cgi-bin/openwebmail/openwebmail.pl, 以 user1 登入
+openwebmail 會使用 user1 這個 unix 帳號
+
+
+單一使用者權限設定
+在 openwebmail.conf.default 中可以找到許多用來限定使用者所能使用功能的選項, 在某些情況下, 針對不同的使用者, 可能會需要設定不同的值. 使用者設定檔的位置是在 cgi-bin/openwebmail/etc/user.conf, 檔案的名稱和使用者名稱一樣 (如果是經過 virtusertable mapping 的 使用者, 以 mapping 之後的名稱為準).
+
+舉例而言, 你希望針對 guest 這個使用者作權限設定
+
+cd cgi-bin/openwebmail/etc/users.conf/
+cp SAMPLE guest (各項說明請參考 cgi-bin/openwebmail/etc/openwebmail.conf.help)
+視需要, 修改 guest 這個檔案的內容
+註: Open WebMail 載入設定檔的順序如下
+
+載入 cgi-bin/openwebmail/etc/openwebmail.conf.default
+載入 cgi-bin/openwebmail/etc/openwebmail.conf
+載入 cgi-bin/openwebmail/etc/sites.conf/domainname (如果有的話)
+
+在載入上述設定檔後, 接著進行下面三個步驟
+
+載入 authentication module
+loginname 根據 virtusertable 被 mapping 到 real userid.
+userid 作密碼確認
+
+
+載入 cgi-bin/openwebmail/etc/users.conf/username (如果有的話)
+由以上也可以知道, 某些選項放到 使用者設定檔是沒有效果的
+同樣的選項如果同時出現在不同的設定檔中, 後面載入的會蓋掉前面的
+
+
+
+PAM 的支援
+PAM 全名是 Pluggable Authentication Modules, 它提供了一種性的機制讓我們能很容易地使用外掛模組的方式來作使用者認證 (也就是密碼查核啦), 更詳細的 PAM 說明, 請參考 http://www.kernel.org/pub/linux/libs/pam/
+
+目前已知 Solaris 2.6, FreeBSd 3.1 和 Linux 都支援 PAM, 要讓 Open WebMail使用 PAM 機制來作使用者認證, 步驟如下
+
+下載 Perl 套件 Authen::PAM (Authen-PAM-0.12.tar.gz), 您可以在 http://www.cs.kuleuven.ac.be/~pelov/pam/ 找到最新的版本
+cd /tmp
+tar -zxvf Authen-PAM-0.12.tar.gz
+cd Authen-PAM-0.12
+perl Makefile.PL
+make
+make install
+
+註: 建議您在 make install 前先做 make test, 如果 make test 有任何錯誤訊息的話, 表示很可能您的系統無法使用 PAM
+
+
+修改 /etc/pam.conf, 加入以下 3 行
+
+在 Solaris
+openwebmail auth required /usr/lib/security/pam_unix.so.1
+openwebmail account required /usr/lib/security/pam_unix.so.1
+openwebmail password required /usr/lib/security/pam_unix.so.1
+
+在 FreeBSD
+openwebmail auth required /usr/lib/pam_unix.so
+openwebmail account required /usr/lib/pam_unix.so
+openwebmail password required /usr/lib/pam_unix.so
+
+註 : 某些版本 FreeBSD 的 PAM 支援有問題 (例: 4.1)
+
+在 Linux
+openwebmail auth required /lib/security/pam_unix.so
+openwebmail account required /lib/security/pam_unix.so
+openwebmail password required /lib/security/pam_unix.so
+
+如果您的 Linux 沒有 /etc/pam.conf, 但是有 /etc/pam.d 這個個目錄
+請建立 /etc/pam.d/openwebmail 這個文字檔, 並放入以下 3 行
+
+auth required /lib/security/pam_unix.so
+account required /lib/security/pam_unix.so
+password required /lib/security/pam_unix.so
+
+pam.d 說明由 protech.AT.protech.net.tw 熱心提供
+
+
+修改 openwebmail.conf, 將 auth_module 成 auth_pam.pl
+檢查 auth_pam.pl 的內容, 看看是否有需要修改的部分
+關於 PAM 設定的進一步說明, 建議您參考由 Andrew G. Morgan 所寫的 The Linux-PAM System Administrators' Guide
+
+目前常見需要使用 auth_pam.pl 的情況, 是使用 NIS server 上的帳號系統. 當使用者帳號放在 NIS server 時, 使用 auth_unix.pl 當認證模組的話, 只能檢查使用者密碼, 卻沒有辦法修改密碼. 但是如果用 auth_pam.pl 當認證模組, 那麼密碼檢查與密碼更改功能都能正常使用.
+
+----------------------------------------------------------------------------------------------------

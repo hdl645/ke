@@ -1,0 +1,41 @@
+vim:ts=4:tw=1024:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* winex 的下載及安裝
+
+	1. winex CVS 的位址已經改變。目前要下載 winex 必須下以下指令：
+	
+	代碼:
+	
+	cvs -d:pserver:cvs@cvs.transgaming.org:/cvsroot login
+	
+	出現輸入密碼的訊息時，輸入 cvs
+	代碼:
+	
+	cvs -z3 -d:pserver:cvs@cvs.transgaming.org:/cvsroot co winex
+	
+	接下來就會將 winex 的原始碼載入到 winex 目錄底下。
+	
+	2. 編譯安裝 winex
+	代碼:
+	
+	./configure --enable-opengl --with-x --enable-pthreads
+	make depend
+	make
+	make install
+	
+	configure 的時候加入 --enable-pthreads 這個參數，小弟發覺在 Linux kernel 2.6.x 底下跑 Warcraft 3 的反應速度有明顯的變快。 
+
+----------------------------------------------------------------------------------------------------
+
+* 與 nvidia 驅動程式的關聯
+
+	安裝好 1.0-5336 版本的驅動程式後用 winex3 執行 Counter-Strike 可以用 OpenGL 模式玩。
+
+----------------------------------------------------------------------------------------------------
+
+* Program Files 位置
+
+	依據 /usr/lib/transgaming_winex3/.transgaming 內設定的 Driver C 而定
+
+----------------------------------------------------------------------------------------------------

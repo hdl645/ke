@@ -1,0 +1,79 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 解 RPM 檔案
+
+	rpm2cpio foobar.rpm | cpio -div
+
+	註: 	-d decompress
+		-i extract
+		-v verbose
+
+----------------------------------------------------------------------------------------------------
+
+* 嘗試從 dvipdfm SRPM 製作 RPM 失敗的解決方法
+
+	用 rpmbuild -bb dvipdfm.XXX.spec 時會出現找不到 kpathsea 的訊息， 但是已經修改過 .spec 檔案， 補上了 --with-kpathsea=/usr 仍然無法解決。 因此看了一下 configure 發現是由下列程式碼負責檢查是否有 kpathsea header file。
+
+# Check whether --with-kpathsea or --without-kpathsea was given.
+if test "${with_kpathsea+set}" = set; then
+  withval="$with_kpathsea"
+  
+  if test -d "$withval"; then
+    CPPFLAGS="$CPPFLAGS -I$withval/include"
+    LDFLAGS="$LDFLAGS -L$withval/lib"
+ fi
+
+fi
+
+
+echo $ac_n "checking whether you have kpathsea headers and they whether they know about the required file formats""... $ac_c" 1>&6
+echo "configure:926: checking whether you have kpathsea headers and they whether they know about the required file formats" >&5
+	 cat > conftest.$ac_ext <<EOF
+#line 928 "configure"
+#include "confdefs.h"
+#include <stdio.h>
+#include <kpathsea/tex-file.h>
+int main() {
+kpse_tex_ps_header_format;
+			 kpse_type1_format;kpse_vf_format
+; return 0; }
+EOF
+if { (eval echo configure:937: \"$ac_compile\") 1>&5; (eval $ac_compile) 2>&5; }; then
+  rm -rf conftest*
+  echo "$ac_t""yes" 1>&6; cat >> confdefs.h <<\EOF
+#define HAVE_KPSE_FORMATS 1
+EOF
+
+else
+  echo "configure: failed program was:" >&5
+  cat conftest.$ac_ext >&5
+  rm -rf conftest*
+  echo "$ac_t""no" 1>&6;
+{ echo "configure: error: PS_HEADER and/or VF formats not found in Kpathsea header files.
+
+This version of dvipdfm requires that kpathsea and its headers be installed.
+If you are sure they are installed and in a standard place, maybe you need a
+newer version of kpathsea?  You also might try setting the environment
+variable CPPFLAGS (or CFLAGS) with -I pointing to the directory containing
+the file "tex-file.h"
+
+" 1>&2; exit 1; }
+fi
+
+	目前的解決方法為將上述 script 程式碼全部註解掉。 加上下列三列到 configure 。
+
+cat >> confdefs.h <<\EOF
+#define HAVE_KPSE_FORMATS 1
+EOF
+
+	最後， 在 .spec 檔案加上 
+	
+%config /usr/share/texmf/dvipdfm/config/t1fonts.map
+
+	全部ok。
+
+	註: 系統上的確有 kpathsea 的 header 檔案。 只是不知道上述測試程式會誤判。
+
+
+----------------------------------------------------------------------------------------------------

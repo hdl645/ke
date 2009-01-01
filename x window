@@ -1,0 +1,1886 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 如何做出 Visual Screen
+
+	目前我的 X Window 設定是有兩個 Display, 第0個是24bit; 第1個是8bit. 希望能將第1個display變成虛擬螢幕.
+
+	原 /etc/X11/XF86Config-4 設定如下: (部份內容)
+
+Section "Screen"
+	Identifier   "Screen0"
+        Device       "RIVA TNT2"
+        Monitor      "Monitor0"
+	DefaultDepth	24	
+
+	Subsection "Display"
+        	Depth       24 
+                Modes       "1024x768" 
+	EndSubsection
+
+	Subsection "Display"
+        	Depth       8  
+                Modes       "1024x768" 
+	EndSubsection
+
+EndSection
+
+改成:
+
+Section "Screen"
+	Identifier   "Screen0"
+        Device       "RIVA TNT2"
+        Monitor      "Monitor0"
+	DefaultDepth	24	
+
+	Subsection "Display"
+        	Depth       24 
+                Modes       "1024x768" 
+	EndSubsection
+
+	Subsection "Display"
+        	Depth       8  
+                Modes       "1024x768" 
+		Virtual     2048 1536             # 新增這一列, 第一個參數是 x dimention; 第二個參數是 y dimention
+		ViewPort    512 384               # 這一列有沒有都無所謂, 主要是在有 Visual Screen 時, 最剛開始顯示的部份的左上角的 x,y 座標
+	EndSubsection
+
+EndSection
+
+	註: 在換成虛擬螢幕以後, 切換到中文輸入法可能會沒發現到, 此時會發生輸入字母都不會出現, 只會出現標點符號. 別緊張, 記得換回英文輸入即可.
+
+----------------------------------------------------------------------------------------------------
+
+* Xft 字體庫：體系結構及用戶指南
+
+文章來源：
+
+http://www.linuxeden.com/edu/doctext.php?docid=3000
+
+附註：我轉成了繁體中文並且做了一些編輯
+
+
+Xft字體庫：體系結構及用戶指南
+
+Keith Packard
+
+XFree86 Core Team, SuSE Inc.
+
+keithp@keithp.com
+
+本文由本站會員麥氏賽揚翻譯，manux代為發表，原文排版非常漂亮，但是由于
+html代碼問題，發到這裡後只能勉強看懂原意，後面評論裡面將會添加一個下載連
+接，感興趣的朋友可以下載回去瀏覽。
+
+摘要
+
+X渲染擴展（X Render Extension）提供了一個新的基于客戶方字形（glyph）和字
+體管理的字形渲染體系結構。這個擴展設計在解決了許多相關技術難題的同時，也
+把光柵化字體、配置字體以及定制字體使用的責任交給了每一個X客戶程序。
+
+編寫Xft庫是為了給X應用程序提供一個能訪問FreeType字體光柵化引擎和X渲染擴
+展的、便于使用的接口，鑑于FreeType沒有提供配置和定制字體的功能，Xft也擔
+負了這一任務。Xft提供了新的字體命名約定、復雜而精密的字體匹配和選擇機
+制，並對相關功能進行充分的抽象，從而使得一般應用程序既能夠從使用X渲染擴
+展的文本輸出獲得益處，又能在不支持這一擴展的X服務器上正常工作。
+
+
+
+1 引言
+
+X渲染擴展[Pac01]把訪問字體文件和生成字形圖像的功能從X服務器移到了X客戶一
+方。採用客戶方字形管理的X應用程序在以下幾個方面有優勢：可以訪問字體文件
+的所有細節，應用程序可以指定特有字體，漸增的光柵化處理（incremental
+rasterization），並且有可能與其他部件共享字體，例如打印機。此外，鑑于底
+層的渲染機制基于圖像而非字形，字形的光柵化技術、乃至字體文件格式本身都不
+再依賴于X服務器的能力，所以現在新字體技術的集成速度可以跟得上獨立應用程
+序的開發，而不必遙遙無期地等待新的X服務器增強技術。
+
+當X服務器不再負責管理字體文件的訪問和字形生成，就需要一個新的函數庫在客
+戶方完成相應的任務。由于X渲染擴展在設計上支持消鋸齒（anti-aliased）圖
+形，這個新的函數庫需要支持高質量的消鋸齒字形光柵化。
+
+FreeType項目[TT00]開發了一個完整的字體光柵化引擎，不僅支持大多數輪廓字體
+格式，還支持標準的X PCF位圖字體，X渲染擴展接收字形圖像並使之在屏幕上顯
+現。為了讓應用程序能在屏幕上顯現高質量的文本，所需要做的就是在FreeType和
+X渲染擴展之間放置一層薄薄的“粘合”代碼。
+
+對于不支持渲染擴展的X服務器，這個函數庫還需要提供訪問“核心”字體（使用原
+始X核心協議訪問的字體）的能力，這就使得應用程序能在轉向新函數庫時仍然支
+持老式X服務器。
+
+FreeType庫沒有指定如何定位字體文件，而是需要應用程序提供字體文件名，這就
+把配置和定制可用字體集合的負擔放在了FreeType庫以外，因此，這個新的“粘合”
+層也需要提供一些配置功能以便在桌面環境中應用。
+
+
+
+2 X渲染擴展字形管理
+
+X渲染擴展提出了幾個簡單抽象供應用程序管理字形。每個Glyph結構包括一個覆蓋
+字形外形的alpha掩碼（一個描述不透明值的矩形映象）、從alpha掩碼原點到名義
+字符原點的偏移量、到下一字形的位移（包括垂直和水平的偏移量），GlyphSet結
+構則包含了一個字形結構的集合，應用程序使用一個32位的索引對字形集進行編號。
+
+應用程序繪制文本時，把一個GlyphSet標識符以及一系列針對該GlyphSet的索引發
+送到X服務器，X服務器通過對指定位置使用字形結構中的偏移量調整確定繪制位
+置，並渲染alpha掩碼來完成對每個字形的處理，後續字形的繪制位置則是通過在
+當前原點加上位移向量實現。正如X核心協議中的PolyText請求，在同一個請求中
+可以對字形序列作出調整位置、改變GlyphSet等變動，從而使得一個復雜的字符串
+在一次操作中完成渲染。
+
+為了覆蓋世界上更多的民族，操作系統支持的語言和區域集合不斷擴展，伴隨這種
+擴展，大多數字體中包含的字形數也大大增加，當今流行的輪廓字體中會包含幾千
+個字形。十多年前，漸增式渲染字形被看作一種合理的優化，現在已成為各種字體
+機制中的基本組成部分，以盡可能減少每種字體佔用的內存，並縮短訪問一種新字
+體時所需的時間。X渲染擴展通過允許在需要時把一個Glyph加入已存在的
+GlyphSet，提供了這種漸增式渲染支持。由于在添加Glyph的過程中沒有任何從X服
+務器到X客戶的信息流，這一過程可以完全異步進行。這種異步性保證了即使面對
+一個高網絡延遲的環境，仍有可接受的性能表現。
+
+當應用程序傳送它們需要顯示的字形圖像時，X服務器通過在任何可能情況下共享
+相同字形來節省內存。
+
+
+
+3 FreeType庫
+
+FreeType項目的初衷是要構建一個自由的TrueType字體光柵化器。FreeType的第一
+版提供了與現有系統相當的高質量TrueType光柵化器，FreeType的第二版對內部結
+構進行了一般化以支持更多字體格式，除了支持Type-1、OpenType和CID等眾多輪
+廓字體格式，FreeType現在還支持X的標準PCF格式（可移植編譯格式）的位圖字體。
+
+FreeType不僅提供光柵化以及度量字形的接口，還提供存取字體文件內各種形式的
+字距調整和字形替換等表格的機制。這就在基礎字體含有相應表格的前提下，使應
+用程序能夠獲得在各種區域中定位字形所必需的數據。
+
+既然FreeType項目明確地要構建一個通用的字體函數庫，在XFree86開發一個新函
+數庫的負擔就可以大大減輕，因為可以直接採用現有系統，並提供“粘合代碼”改變
+FreeType數據結構使之使用X渲染擴展的要求。這固然使得應用程序需要面對
+FreeType函數庫可能的變化，但考慮到FreeType是一個成熟的項目，相對于完全由
+XFree86開發一個新函數庫的情形，這種變化的嚴重性大概會輕很多。
+
+字體命名和配置不屬于FreeType函數庫，這些“雜務”交給了應用程序。考慮到
+FreeType應用于各種環境，有些甚至沒有文件系統，為保證FreeType得到最大程度
+應用並獨立于系統策略，這種設計思想是適當的。提供這些支持成為Xft實現中最
+困難的部分，並且其中一部分可能很快就被替換。
+
+
+
+4 XLFD命名
+
+X核心協議規定了用非結構化字符串命名字體的方法，X邏輯字體描述（XLFD）
+[SG92]用于在字符串名格式中加入結構信息。在開發X時，用于桌面計算的輪廓字
+體還是一個相對新奇的事務，所以X核心協議和XLFD都是基于位圖字體設計的，當
+圍繞縮放字體命名的語法和語義加入XLFD時，基于XLFD的開發已經進行了相當長的
+時期。
+
+XLFD中字體命名語法的意圖在于僅通過名字就可以向應用程序提供足夠的字體信
+息，這樣就可以在不訪問字體數據情況下，進行字體選擇和字體列表表示。
+
+XLFD還提供了使用包含“?”和“*”的名字打開字體的標準策略，使用這類名字時，選
+中的字體將是第一個匹配的字體，即使用相同模式請求列出字體時返回的第一個。
+不幸的是，X服務器保存字體名時為了高效搜索，會在各字體目錄中進行內部排
+序，所以不能保證“*”的默認值是合理的。例如，當在字體名的weight字段使用“*”
+時，X服務器會把bold字體列在normal字體之前。
+
+這個策略真正失敗之處在從point（點值）尺寸到pixel（像素）尺寸的映射。XLFD
+在字體名中分別提供了兩個軸向上的pixel尺寸、point尺寸和resolution（解析
+度），標準的X字體按照解析度分別存放，“75dpi”和“100dpi”下各自存放著與該解
+析度匹配的各種點值尺寸的字體，其他字體目錄下一般是為了在75dpi屏幕光柵化。
+
+協議指導X服務器按照在字體路徑（譯注：font path，應指配置文件中相應節）中
+出現的順序去搜索字體目錄，這就使字體路徑決定了對解析度的傾向性。如果
+100dpi的目錄列在前面，當應用程序在字體名的resolution字段用“*”時，只要在
+100dpi目錄下存在匹配字體就會使用該字體，否則才去嘗試75dpi的字體。
+
+應用程序如果在字體名中僅指定point尺寸，而在resolution字段使用“*”，那麼最
+終將會得到一組隨即尺寸的字體：那些在100dpi目錄下發現的字體按照100dpi屏幕
+光柵化，其他字體則按照75dpi屏幕光柵化從而會顯得小一些。
+
+最終的結果是XLFD的字體匹配充滿了危險，應用程序經常列出所有可用字體（作出
+選擇）然後提交完整XLFD字體名（譯注：不含“?”和“*”）給X服務器。
+
+XLFD的另一個問題是在字體名中包含了字形的平均寬度字段。對于需要在不同總體
+寬度的字體中進行選擇的應用程序而言，這是個非常有用的信息，而且對位圖字體
+也很容易計算。但是對輪廓字體，除非在指定尺寸下對每個字形進行光柵化計算，
+該字段值不能算出。僅僅列出一個特定尺寸下所有的可用字體就會導致光柵化每一
+個字體的每一個字形。
+
+XLFD提供了關于可用字體的有用信息，出列平均寬度，這些信息都是容易計算並交
+付應用程序的。使用XLFD的應用程序應該在本地管理XLFD字體名，而不要依賴服務
+器方字體匹配，也就是通過列出可用字體收集信息，再利用這些信息構造完整字體
+名。
+
+鑑于XLFD沒有提供一種按照語義匹配的合理方案，需要有新方案允許在應用程序給
+定一組約束情況下，基礎的字體系統能夠定位一個適當的字體。這樣的系統需要有
+足夠的靈活性以便能夠包含現在不能預料的新字體特性，也不需要應用程序完全指
+定字體的方方面面。
+
+
+
+5 設計一個新函數庫
+
+Xft在三個方面與環境交互：通過編程接口與應用程序交互，通過配置文件與系統
+交互，通過讓用戶指定字體名與用戶交互。雖然這三方面在函數庫中緊密相關，但
+從設計角度來說，它們是分離的。
+
+5.1 應用程序接口設計
+
+Xft的首要目標是把FreeType的輸出和X渲染擴展結合起來，但是，為了Xft能作為
+現有的Xlib文本輸出例程的替代物而被人接受，其次要目標包括支持核心X字體，
+盡管這樣做可能以損失應用程序功能為代價。
+
+由于FreeType不提供字體選擇功能，所以Xft的一部分要進行字體匹配。採用現有
+的XLFD機制會極大地限制字體匹配地能力，所以Xft提出了一種新格式。這種選擇
+機制被設計為總能匹配某種字體，允許應用程序假設適當地字體存在，避免在每個
+級別上都要考慮失敗回落。
+
+另一個要求是函數庫要提供合理地匹配，例如需要italic（斜體）字體時用
+oblique（傾斜）字體代替，在不指定weight要求時使用中等weight的字體。這允
+許應用程序在指定字體時不必指定所有的特征，而且可以期望得到合理的結果。當
+應用程序的請求存在相互矛盾時，決定哪些特征更重要的政策能提供解決方案。
+
+為了在函數庫級別上簡化可選的文本編碼，所有的文本輸出例程只接受Unicode編
+碼的數據。其他的編碼需要由應用程序負責轉換，無論是在操作系統邊界還是應用
+程序與Xft之間。由于大部分現存的字體一般都有Unicode編碼（譯注：指其內部檢
+索採用的編碼方式，可能有多種，置于不同表格結構，這取決于具體的字體文件格
+式），或是某種易于轉換到Unicode的編碼，這個策略顯著地簡化了函數庫地內部
+結構，同時以一致的視圖呈現于應用程序之前。
+
+另一個重要目標是盡可能避免把內部數據結構暴露給應用程序。X渲染擴展允許漸
+增式下載新字形，設計Xft時允許按需光柵化新字形，這就要求（字形的）度量信
+息通過一個函數獲取，而不是象Xlib中那樣直接訪問相應數據結構。
+
+最後，Xft被設計為一個完整的字體訪問函數庫，所以底層的FreeType數據類型未
+被隱藏，以便應用程序可以直接使用FreeType自身。這降低了Xft的復雜度，同時
+允許應用程序完全存取可用的字體信息。
+
+5.2 字體命名設計
+
+Xft字體命名設計方案最初源于這樣的觀念，即字體名應該反映字體屬性，不管是
+應用程序想要的屬性還是字體自身的屬性。由于應用程序的需求並不固定，而字體
+的特性也不斷得到增強，下述想法逐漸形成：字體名應該用一個可變的指定屬性列
+表表示，每個屬性有一組相關值。允許屬性有多個值，提供了為字體的家族
+（family）名或風格（style）等屬性指定可接受的替代值的能力。
+
+這一設計統一了應用程序的字體請求和可用字體的表示。一個XftPattern是一組指
+定屬性，每個屬性有一個或多個值。每個可用字體用一個給出了該字體特性的
+XftPattern來描述。應用程序構造一個描述了其請求的XftPattern，該XftPattern
+其後將與所有描述可用字體的XftPattern進行匹配，與應用程序請求最匹配的可用
+字體將被選中。這種“最近匹配”機制保證每個應用程序字體請求都能匹配一個字
+體，雖然該字體的精確特性可能與應用程序的請求有一定差別。
+
+一種XftPattern的文本表示方法最終被設計出來，這就允許應用程序在很大程度上
+象當前一樣使用字符串去選擇字體。
+
+XftPattern提供了一種簡單但可擴展的機制，供應用程序與所使用的字體之間傳達
+請求和能力，具體的用法在第6節描述。
+
+5.3 字體列表設計
+
+X核心協議提供了支持查詢可用字體集合的原語，簡單的、shell風格的模式
+（Pattern）傳送到X服務器，匹配該模式的字體名集合被返回。只有獲得幾乎包括
+系統中所有字體的列表，才能發現可用的字體家族集合。應用程序要負責從這些大
+量數據中提取有用信息。
+
+真正需要的是能向系統請求特定的相關信息，並由系統丟棄多餘數據。應用程序可
+以專注于檢驗和操作信息，而不是花費很大氣力去解析XLFD字符串。
+
+Xft把用于返回可用字體數據的信息分為兩部分，第一部分是從可用字體中做選擇
+所需的模式，第二部分是決定應用程序有興趣接收信息的一組屬性名。匹配字體的
+列表將被修剪，以消除在所選屬性中重復的項。
+
+最後需要說明的是，“最好匹配”的觀念在列出字體時沒有用，應用程序用字體列表
+為用戶產生對話框，或者用來發現字體家族的能力。這時，需要對模式中的每個元
+素做精確匹配，而不是測量可用字體與請求模式的差距（以尋找最好匹配──譯注）。
+
+5.4 配置設計
+
+為避免可能在字體配置和定制機制出現互不兼容的分支，需要一個標準。鑑于沒有
+可用的現有標準，在Xft中加入字體配置至少能保證X應用程序使用相同方式共享和
+命名字體。
+
+一個基本的定制需求是允許一種字體作為另一種字體的替代，這種“別名”機制能在
+某種字體不可用時，選擇擁有近似特性的字體來維護文本的外觀統一。另一個有用
+的任務是支持一般的“mono”、“sans”和“serif”字體，應用程序可以在大多數情況
+下按照用戶偏好選用。
+
+另一個目標是要使添加字體盡可能容易。核心X字體配置機制使用X服務器字體路徑
+列出所有查找字體的目錄集合，在每個目錄下，需要生成兩個單獨的配置文件來進
+行字體名到文件名的映射。如果這些文件丟失或損壞，就不能正確地進行字體選
+擇。不再使用這些配置文件，會使系統總體上更加健壯。
+
+最後，用戶和管理員需要定制特定字體的光柵化。一些用戶希望避免對某些字體、
+或是某些尺寸範圍內的字體使用消鋸齒功能，另一些需要對某些字體調整尺寸和間
+距。
+
+實際上，Xft並非放置所有這些配置功能的正確場所，因為X應用程序並不是唯一對
+訪問字體和字體信息感興趣的程序。把這些配置機制移出Xft，放在一個能被非X應
+用程序使用的函數庫，將是近期開發的焦點（譯注：該功能已經移到FontConfig函
+數庫。）
+
+
+
+6 Xft字體名
+
+Xft的字體名用一個指定屬性的列表表示，其中每個屬性帶有一個有類型值的列
+表，這個屬性集合存放在XftPattern數據結構中。有一些例程用于創建、編輯
+XftPattern以及進行與可用字體列表進行匹配的操作。Xft有一些內部支持的屬
+性，如表1中所示；但是並不限制應用程序僅使用這些屬性，Xft會忽略所有不理解
+的屬性。
+
+為了讓XftPattern能夠傳輸和存儲，一個模式的結構能用一個字符串表示。這些字
+符串的格式如圖1所示。每一個支持的（屬性）名字有一個隱含類型，以便解析相
+關值，這樣就避免使用引號或其它詞法機制來區分不同類型。一些指定常量可以取
+代一些值或者完整的“name=value”對，因為常量唯一確定了相關屬性名字，沒有必
+要再顯式給出名字。表2給出了可用的常量列表。這些常量中的每一個在內部都用
+一個值表示，這就允許在應用程序請求的值和可用字體的值之間進行相似匹配。例
+如，一個應用程序請求“demibold”時，會選中“bold”而不是“medium”。這有助于達
+成應用程序的意圖，即使在開發和測試過程中沒有與之匹配的可用字體。
+
+名字 類型 C語言名
+family String XFT_FAMILY
+style String XFT_STYLE
+slant Int XFT_SLANT
+weight Int XFT_WEIGHT
+size Double XFT_SIZE
+pixelsize Double XFT_PIXEL SIZE
+encoding String XFT_ENCODING
+spacing Int XFT_SPACING
+foundry String XFT_FOUNDRY
+core Bool XFT_CORE
+antialias Bool XFT_ANTIALIAS
+xlfd String XFT_XLFD
+file String XFT_FILE
+index Int XFT_INDEX
+rasterizer String XFT_RASTERIZER
+outline Bool XFT_OUTLINE
+scalable Bool XFT_SCALABLE
+rgba Int XFT_RGBA
+scale Double XFT_SCALE
+render Bool XFT_RENDER
+minspace Bool XFT_MINSPACE
+dpi Double XFT_DPI
+charwidth Int XFT_CHAR WIDTH
+charheight Int XFT_CHAR HEIGHT
+matrix Matrix XFT_MATRIX
+
+表1 Xft字體名屬性
+
+
+
+name : families sizes properties
+
+families : family-names
+
+|
+
+family-names : family-names ,string
+
+| string
+
+sizes : -size-list
+
+|
+
+size-list : size-list ,number
+
+| number
+
+properties : properties :property
+
+|
+
+property : string =value
+
+| named-constant
+
+value : string
+
+| number
+
+| boolean
+
+| named-constant
+
+| matrix
+
+matrix : number number number number
+
+
+
+Examples:
+
+times,serif-12:italic
+
+courier,mono-14:matrix=1 .1 0 1
+
+圖1: Xft字體名語法.
+
+
+
+另外，雖然XLFD字體名不理想，但是它在現有的X應用程序中很常見，而且也表達
+了一組期望的字體特性。Xft能夠把XLFD字體名轉換成XftPattern，以便能使用Xft
+匹配規則選擇字體，而不用第4節中所述的XLFD匹配規則。
+
+名字 常量 值
+weight light 0
+medium 100
+demibold 180
+bold 200
+black 210
+
+slant roman 0
+italic 100
+oblique 110
+
+spacing proportional 0
+mono 100
+charcell 110
+
+rgba rgb 1
+bgr 2
+vrgb 3
+vbgr 4
+
+表2 Xft字體名常量
+
+
+
+Xft字體名被設計為可擴展，以便即使Xft/FreeType2界面繼續成長並為新系統提供
+模式元素情況下，現有應用程序依然能夠正確運轉。
+
+
+
+7 Xft配置文件
+
+使用核心協議，應用程序保證可以存取所有可用字體，因為由X服務器負責定位字
+體；現在字體管理移到了客戶方，定位字體成為應用程序的責任。沒有了可以共享
+的集中配置機制，每個應用程序可用的字體集合都可能有很大不同，安裝和選擇字
+體就可能有問題或者出錯。
+
+Xft配置文件的主要作用是指定可用字體文件的位置，其次是調整字體選擇以及定
+制光柵化參數。
+
+默認情況下，Xft的配置文件“XftConfig”在/usr/X11R6/lib/X11目錄下，但可以通
+過在XFT_CONFIG環境變量中指定一個不同的文件名來改變。
+
+文件中任何地方都可以放置注釋，“#”字符將使其後直到行尾的部分成為注釋。其
+他的語法將在下面幾節說明。
+
+7.1 字體目錄
+
+在配置字體所在位置時，Xft使用了一種極為簡單的方法。指定一個目錄的列表，
+Xft在這些目錄中查找字體文件，所有找到的字體文件將被加入用于匹配的可以字
+體列表。（字體）在目錄中的位置是無關緊要的，因為Xft總是在所有字體中進行
+最佳匹配。在配置文件中，用如下格式的行來指定目錄：
+
+dir "/usr/X11R6/lib/X11/fonts/Type1"
+
+在目錄下不再需要其他配置，Xft自動掃描目錄來發現字體。
+
+7.2 嵌套配置文件
+
+為了把配置文件劃分為便于管理的部分，也為了允許基于用戶的函數庫定制，Xft
+配置文件中允許出現如下格式的行：
+
+include "/usr/local/lib/XftAliases"
+
+includeif "~/.xftconfig"
+
+兩種格式的唯一區別在于：使用第一種格式，當被引用的文件找不到時，會發出警
+告消息。“~”字符指的是用戶的主目錄。因為Xft配置文件由用戶的應用程序自己進
+行解析，這就能在不管X的顯示（display）情況下，實現基于用戶的定制。
+
+7.3 字體模式編輯
+
+為了能在字體匹配過程中實現字體替換以及其他的調整，也為了能配置光柵化過
+程，Xft配置文件中可以包含一些操作，這些操作能在匹配過程結束前修改Xft模
+式。這些操作被稱為“編輯命令”（editing commands），與模式匹配時執行以修改
+模式，每個命令按照它們在配置文件中出現的順序執行。這些命令的語法示于圖2。
+
+
+
+command : match tests edit edits
+
+tests : test tests
+
+|
+
+test : any | all name compare value
+
+compare : == | != | < | <= | > | >=
+
+edits : edit edits
+
+|
+
+edit : name eqop expr ;
+
+eqop : = | += | =+
+
+expr : value
+
+| name
+
+| expr binop expr
+
+| !expr
+
+| expr ?expr :expr
+
+binop : || | && | == | != | < | <= | > | >= | + | - | * | /
+
+
+
+Examples:
+
+# Use LuciduxSerif as default serif’ed font
+
+match any family == "serif"
+
+edit family += "LuciduxSerif";
+
+# Avoid using anti-aliasing at some sizes for LuciduxSerif face
+
+match any family == "LuciduxSerif" any size < 14 any size > 8
+
+edit antialias = false;
+
+
+
+圖2 Xft模式編輯語法
+
+
+
+match子句用來選擇待編輯的模式，其值為“真”時才會進行編輯。如果表達式使用
+“any”前綴，那麼當與指定字段相關的任何值符合條件時，子句取“真”值；如果表
+達式使用“all”前綴，那麼只有當所有值符合條件時，子句才取“真”值。
+
+edit子句在模式的字段上操作，可以替換或者修正相關值。如果在match子句中引
+用模式中同一元素，則匹配值將被標記。
+
+在edit子句中，“+=”操作符把值插入標記值之前，“=+”操作符把值插入標記值之
+後，“=”操作符則替換標記值。如果沒有值被標記，“+=”和“=+”操作符分別把值加
+入整個值列表的頭和尾，“=”操作符將會替換所有的值。
+
+表達式中的操作符的含義都很明顯，一種可能有些意外的情況，是“+”操作符可以
+用于連接字符串。表達式中可能引用字體中的某些字段，這種情況下，使用該字段
+的第一個值。
+
+使用此機制幾個月後，發現這種機制很復雜，並且完成不了一些預期的任務。缺陷
+之一是編輯只影響進入的模式，而不對匹配的字體進行任何操作。這使得禁止
+LuciduxSerif字體消鋸齒效果的例子（譯注：圖2中的第二個例子）產生非預期的
+結果，例如，當以如下名字指定字體時，
+Times,LuciduxSerif,serif-10
+match子句將會成功匹配該模式，從而導致Times字體在顯示時失去了消鋸齒效果。
+
+另一個問題是字體別名含義不清，目前還沒有提供精確語義。關于字體別名，有兩
+種可能的語義：一種是在任何情況下都用一種字體替換其它，另一種是只有當某些
+字體不存在時，才用特定字體替換。關于這一點的明確聲明既能澄清文件格式，也
+有助于改進匹配的語義。（譯注：本段中的“字體”對應原文的face）
+
+
+
+8 字體匹配
+
+Xft中字體匹配的目標是從應用程序接收一組字體特性的描述，然後從所有可用字
+體中返回最好的。應用程序調用XftFontMatch函數，並提供XftPattern形式的字體
+規格說明。模式按照7.3節中所描述的方式進行編輯，表3所示的X資源可以用來修
+改模式。如果應用程序沒有指定像素尺寸，將根據指定的點值尺寸（如果也沒有指
+定，使用12.0）乘以縮放因子，再利用指定的dpi值將點值轉換為像素。其他的X資
+源用作相關模式元素的默認值。
+
+X資源 類型 效果 默認值
+
+Xft.render Bool 指導Xft使用客戶方字體 HasRender
+Xft.core Bool 指導Xft使用服務器方字體 !HasRender
+Xft.antialias Bool 選擇字形是否需要消鋸齒 True
+Xft.rgba Number 指定LCD屏幕上的子像素順序 0
+Xft.minspace Bool 消除行間的額外間距 False
+Xft.scale Number 所有字體點值尺寸的縮放因子 1.0
+Xft.dpi Number 用于從點值尺寸轉換為像素尺寸 屏幕的垂直dpi
+
+表3 用X資源調整Xft值
+
+
+
+完整的模式隨後將用于與所有可用字體進行比較，只有表4中所示的字段在比較中
+有用。表中字段的順序是有意義的，表中靠前的元素不匹配將使後面元素的匹配變
+得無效。如果模式或字體缺少某一元素，將默認為匹配。數字值按照其差值的大小
+進行度量，這就是為什麼指定“oblique”將選擇“italic”，而不是“roman”。（譯
+注：參見表2的常量定義。）
+
+Order Name Type
+1 foundry String
+2 encoding String
+3 antialias Bool
+4 family String
+5 spacing Number
+6 pixelsize Number
+7 style String
+8 slant Number
+9 weight Number
+10 rasterizer String
+11 outline Bool
+
+表4 Xft字段比較的匹配順序
+
+
+
+有多個值的字段傾向于匹配列表中靠前項的字體，按照這種方式，下面名字將相對
+于“LuciduxSerif”優先匹配“Times”。
+Times,LuciduxSerif,serif-10
+
+一但選中了某一字體，將會構造一個能精確描述該字體的XftPattern，以便應用程
+序知道究竟選用了什麼字體。這個模式包括底層字體文件的信息，從而允許應用程
+序直接通過FreeType訪問未獲得的信息。在模式中有、而字體中沒有的字段也被加
+上，這就允許應用程序之間交換字體模式的信息，這種通信既可以在應用程序與光
+柵化器之間，也可以在應用程序自身發生。
+
+
+
+9 X核心字體處理
+
+雖然Xft的主要目標是在FreeType和X渲染擴展基礎上，提供客戶方字體支持，但是
+為了在X渲染擴展不可用時提供應用程序兼容性，同時X核心字體支持也是合理的。
+這必然限制函數庫的能力，但即使這樣，很多應用程序無論使用X核心字體或基于
+渲染擴展字體機制時，不加修改地使用Xft函數，另一些則只需作一些小小的改動
+以便注意到何時不能使用FreeType函數。
+
+核心字體處理有兩個部分：字體選擇和渲染。字體選擇是通過列出可用的X字體，
+將其轉換為XftPattern結構，然後從應用程序接收模式進行匹配。由于按照接近程
+度進行匹配，而不是採用簡單的shell模式匹配，一般情況下，這種匹配得到的結
+果要比用XLFD指定更有用。這有助于簡化應用程序的設計，因為在此之前它們需要
+包含可觀的、用于X核心字體匹配的機制。
+
+一但選定某種核心字體，渲染就成為簡單的事情：可以讓Xft例程調用標準Xlib中
+文本繪制例程。唯一的困難是把應用程序提供的Unicode字形映射到字體所支持的
+編碼。
+
+這種合並的效果之一是Xft渲染例程只提供那些渲染擴展和核心字體都支持的能
+力。應用程序可以為繪制指定半透明的顏色值，但是如果使用的是核心字體，該指
+定將被忽略。類似地，Xft不提供選擇光柵化操作或者組合操作（譯注：X渲染擴展
+在服務器方的基本設計思想是基于圖像組合操作），因為它們都只被底層的一種渲
+染機制支持。最終的結果是一種新的使用核心字體的方式，相對于Xlib中的對應
+物，在許多方面更容易使用，並且功能更強大。
+
+
+
+10 Xft接口總覽
+
+Xft編程接口很容易劃分到三個單獨區域：處理XftPattern以及匹配字體、在屏幕
+上繪制字形、用于提供底層FreeType函數庫接口的一小部分。
+
+10.1 Xft數據結構
+
+XftValue
+
+typedef enum _XftType {
+
+XftTypeVoid,
+
+XftTypeInteger,
+
+XftTypeDouble,
+
+XftTypeString,
+
+XftTypeBool,
+
+XftTypeMatrix
+
+} XftType;
+
+typedef struct _XftValue {
+
+XftType type;
+
+union {
+
+char *s;
+
+int i;
+
+Bool b;
+
+double d;
+
+XftMatrix *m;
+
+} u;
+
+} XftValue;
+
+一個XftValue存放一個XftPattern元素的一個值，應該作為一個加了標簽的聯合來
+對待：使用聯合前應該先設置或檢查“type”字段。字符串或者矩陣元素單獨存放，
+Xft從應用程序接收XftValue結構後，總是根據這些指針復制數據，這就使得應用
+程序自由地決定使用靜態或是堆棧中的存儲。
+
+XftPattern
+
+typedef struct _XftPattern
+
+XftPattern;
+
+XftPattern是一個不透明地數據結構，用于存放一個指定元素的列表，而每個元素
+又有一個XftValue的列表。Xft為構建和查詢這些模式提供了接口。
+
+XftFont
+
+typedef struct _XftFont {
+
+int ascent;
+
+int descent;
+
+int height;
+
+int max_advance_width;
+
+Bool core;
+
+XftPattern *pattern;
+
+union {
+
+struct {
+
+XFontStruct *font;
+
+} core;
+
+struct {
+
+XftFontStruct *font;
+
+} ft;
+
+} u;
+
+} XftFont;
+
+當打開字體時，返回XftFont數據結構，並用于繪制字形。其可見成員提供了關于
+字體的少量信息。如果core的值為真，底層使用X核心字體，這時u.core.font 指
+向一個 XfontStruct結構；否則底層使用FreeType字體而u.ft.font字段引用
+XftFontStruct結構。
+
+XftFontStruct
+
+typedef struct _XftFontStruct
+
+XftFontStruct;
+
+struct _XftFontStruct {
+
+FT_Face face;
+
+GlyphSet glyphset;
+
+int min_char;
+
+int max_char;
+
+FT_F26Dot6 size;
+
+int ascent;
+
+int descent;
+
+int height;
+
+int max_advance_width;
+
+int spacing;
+
+int rgba;
+
+Bool antialias;
+
+int charmap;
+
+XRenderPictFormat *format;
+
+XGlyphInfo **realized;
+
+int nrealized;
+
+Bool transform;
+
+FT_Matrix matrix;
+
+};
+
+也許這個結構將來會隱藏起來，用一些適當的函數訪問某些內部字段。最有用的字
+段當屬“face”，用于引用底層的FreeType對象，但是在內存中保存這類對象開銷太
+大，所以這些應該被緩衝並且按需調入。應用程序在使用該字段時，明智的方法是
+通過宏包裝，以備將來該字段不再可見。關于該結構其他字段的可見性還需進一步
+核查。
+
+XftDraw
+
+typedef struct _XftDraw
+
+XftDraw;
+
+XftDraw封裝了在X可畫物上渲染字形所需的狀態。對于使用渲染擴展的情況，需要
+Picture，對于使用X核心協議情況，需要GC和相關像素值。（譯注：可畫物，
+drawable，是Xlib編程基本概念，包括window和pixmap）
+XftColor
+
+typedef struct _XftColor {
+
+unsigned long pixel;
+
+XRenderColor color;
+
+} XftColor;
+
+渲染擴展需要RGBA，而X核心需要像素值；XftColor保存了二者，並有相應例程來
+初始化以及釋放相關資源。對于真彩色可視類型，分配例程為了避免往返傳遞的開
+銷，在本地計算像素值，這樣來消除性能下降。如果已知將使用渲染擴展，
+“color”成員可以手動初始化而不去設置“pixel”的值。（譯注：可視類型，visual
+type，是Xlib編程基本概念，可以是StaticGray, StaticColor,TrueColor,
+GrayScale, PseudoColor, 或DirectColor之一）
+
+XftObjectSet
+
+typedef struct _XftObjectSet
+
+XftObjectSet;
+
+Xft的字體列示機制使用XftObjectSet來限制返回給應用程序的數據總量，
+XftObjectSet用于存放一個字段名的列表。
+
+XftFontSet
+
+typedef struct
+
+_XftFontSet {
+
+int nfont;
+
+int sfont;
+
+XftPattern **fonts;
+
+} XftFontSet;
+
+XftFontSets指向一組模式集合，用作字體列示函數的返回值。
+
+XftResult
+
+typedef enum _XftResult {
+
+XftResultMatch,
+
+XftResultNoMatch,
+
+XftResultTypeMismatch,
+
+XftResultNoId
+
+} XftResult;
+
+需要返回搜索結果的函數使用這個數據類型來表示它們的發現，XftResultMatch表
+示發現了對象XftResultNoMatch說明沒有發現匹配對象，XftResultTypeMismatch
+說明發現了某個對象，但是類型不對，XftResultNoId說明發現了對象，但是比請
+求的值少。
+
+10.2 字體模式操作
+
+許多Xft操作涉及XftPattern對象，鑑于應用程序不應該直接訪問這些對象，有一
+組例程用于操作它們。
+
+XftPatternCreate
+
+XftPattern *
+
+XftPatternCreate (
+
+void)
+
+創建一個空的模式。
+
+XftPatternDuplicate
+
+XftPattern *
+
+XftPatternDuplicate (
+
+XftPattern *p)
+
+創建一個新模式，其所有值源自“p”所指對象。如果值引用其他存儲（字符串和矩
+陣），相關存儲將被復制到新分配存儲區中。
+
+XftPatternDestroy
+
+void
+
+XftPatternDestroy (
+
+XftPattern *p)
+
+釋放所有相關的存儲，包括模式中引用的字符串和矩陣。
+
+XftPatternAdd
+
+Bool
+
+XftPatternAdd (
+
+XftPattern *p,
+
+const char *object,
+
+XftValue value,
+
+Bool append)
+
+把“value”加入“object”字段的值列表中。如果“append”為True，值將被加到列表
+尾部，否則插入到頭部。如果“value”引用字符串或者矩陣，XftPatternAdd將分配
+新存儲區並復制，只有在分配空間失敗時，XftPatternAdd才返回False。此函數是
+其他XftPatternAdd函數的基礎。
+
+Bool
+
+XftPatternAddInteger (
+
+XftPattern *p,
+
+const char *object,
+
+int i)
+
+Bool
+
+XftPatternAddDouble (
+
+XftPattern *p,
+
+const char *object,
+
+double d)
+
+Bool
+
+XftPatternAddString (
+
+XftPattern *p,
+
+const char *object,
+
+const char *s)
+
+Bool
+
+XftPatternAddMatrix (
+
+XftPattern *p,
+
+const char *object,
+
+const XftMatrix *s)
+
+Bool
+
+XftPatternAddBool (
+
+XftPattern *p,
+
+const char *object,
+
+Bool b)
+
+這些函數中的每一個都會創建適當類型的臨時XftValue，並作為參數傳遞給
+XftPatternAdd，調用時“append”設為True。
+
+XftPatternGet
+
+XftResult
+
+XftPatternGet (
+
+XftPattern *p,
+
+const char *object,
+
+int id,
+
+XftValue *v)
+
+XftPatternGet搜索指定的模式，找到名字與“object”匹配的元素，然後在值列表
+中找到第“id”個（從0開始計數）個元素，把結果值存入“v”。此函數不為字符串和
+矩陣分配存儲區，所以應用程序必須確保不在XftPattern自身的生存期之外引用該
+值。此函數是其他XftPatternGet函數的基礎。
+
+XftResult
+
+XftPatternGetInteger (
+
+XftPattern *p,
+
+const char *object,
+
+int n,
+
+int *i)
+
+XftResult
+
+XftPatternGetDouble (
+
+XftPattern *p,
+
+const char *object,
+
+int n,
+
+double *d)
+
+XftResult
+
+XftPatternGetString (
+
+XftPattern *p,
+
+const char *object,
+
+int n,
+
+char **s)
+
+XftResult
+
+XftPatternGetMatrix (
+
+XftPattern *p,
+
+const char *object,
+
+int n,
+
+XftMatrix **s)
+
+XftResult
+
+XftPatternGetBool (
+
+XftPattern *p,
+
+const char *object,
+
+int n,
+
+Bool *b)
+
+這些函數中的每一個都調用XftPatternGet。如果結果的數據類型與函數不匹配，
+函數將返回XftResultTypeMismatch，否則與XftPatternGet的返回值相同。
+
+XftPatternBuild
+
+XftPattern *
+
+XftPatternBuild (
+
+XftPattern *orig,
+
+...)
+
+“orig”之後的參數構成了一個用于加入到指定模式的名字、類型和值的列表，如果
+“orig”為空，將分配一個新模式。模式參數的格式如下：
+
+char *object,
+
+XftType type,
+
+union {
+
+char *s;
+
+int i;
+
+Bool b;
+
+double d;
+
+XftMatrix *m;
+
+} u
+
+列表用一個空對象結束，例如：
+
+p = XftPatternBuild (
+
+0,
+
+XFT_FAMILY,
+
+XftTypeString,
+
+"mono",
+
+XFT_SIZE,
+
+XftTypeDouble,
+
+12.0,
+
+0);
+
+這個函數是一個便捷函數，它把若幹XftPatternAdd調用封裝到一個語句，其語義
+與作一組相當的XftPatternAdd調用是一樣的。
+
+XftPattern *
+
+XftPatternVaBuild (
+
+XftPattern *orig,
+
+va_list va)
+
+這個函數使用變參列表，其參數格式與XftPatternBuild 一致，產生結果也一樣。
+
+10.3 字體選擇
+
+Xft的字體選擇函數分若幹級別，所用到的模式既可以由簡單的字體名字符串隱含
+生成，也可以由應用程序顯式管理，在交付下層匹配接口前進行操作。作為最基本
+的級別，Xft提供：
+
+XftFontMatch
+
+XftPattern *
+
+XftFontMatch (
+
+Display *dpy,
+
+int screen,
+
+XftPattern *pattern,
+
+XftResult *result)
+
+此函數用應用程序生成的XftPattern進行配置文件編輯和X資源替換（譯注：見第
+7、8節），然後把得到的模式在可用字體集合中匹配，最接近的字體名以另一個
+XftPattern的形式返回，該模式包含足夠的信息以使用XftFontOpenPattern函數打
+開字體。如果失敗，返回值為0，並且在“result”中放置錯誤指示。
+
+XftFontOpenPattern
+
+XftFont *
+
+XftFontOpenPattern (
+
+Display *dpy,
+
+XftPattern *pattern)
+
+XftFontOpenPattern接受匹配的字體模式，為字體創建XftFont結構。返回的
+XftFont包含一個對傳入模式的引用，該模式將在以該XftFont為參數調用
+XftFontClose時被銷毀。
+
+XftFontOpen
+
+XftFont *
+
+XftFontOpen (
+
+Display *dpy,
+
+int screen,
+
+...)
+
+“screen”之後的參數構成了一個暗含的XftPattern，如同10.2節對
+XftPatternBuild參數的描述。下面是一個例子：
+
+f = XftFontOpen (
+
+dpy,
+
+DefaultScreen(dpy),
+
+XFT_FAMILY,
+
+XftTypeString,
+
+"mono",
+
+XFT_SIZE,
+
+XftTypeDouble,
+
+12.0,
+
+0);
+
+根據這些參數可以創建一個模式，將其作為參數調用XftFontMatch，返回結果有傳
+遞給XftFontOpenPattern，最終產生本函數的返回值。
+
+XftFontOpenName
+
+XftFont *
+
+XftFontOpenName (
+
+Display *dpy,
+
+int screen,
+
+const char *name)
+
+與XftFontOpen類似，“name”參數構成暗含的XftPattern，XftFontMatcn和
+XftFontOpenPattern以同樣方式被調用以最終得到匹配的XftFont。
+
+XftFontOpenXlfd
+
+XftFont *
+
+XftFontOpenXlfd (
+
+Display *dpy,
+
+int screen,
+
+const char *xlfd)
+
+除了通過解析“xlfd”指向的XLFD字體名得到XftPattern以外，此函數與
+XftFontOpenName完全相同。
+
+XftFontClose
+
+void
+
+XftFontClose (
+
+Display *dpy,
+
+XftFont *font)
+
+下層的核心或者FreeType字體對象被關閉，字體引用的模式被銷毀。
+
+10.4 XftDraw操作
+
+Xft提供了可以屏蔽X核心和渲染擴展這兩種不同渲染機制之間差異的一種抽象，
+XftDraw對象提供了兩種模式的操作對象，並包裝了兩種渲染模型所需的適當信息。
+
+XftDrawCreate
+
+XftDraw *
+
+XftDrawCreate (
+
+Display *dpy,
+
+Drawable drawable,
+
+Visual *visual,
+
+Colormap colormap)
+
+此例程創建一個XftDraw對象，引用所涉及的可畫物以及相關的可視類型及顏色
+圖。即便使用指定了最終像素的像素圖（pixmap）進行渲染，也需要指定visual參
+數。
+
+XftDrawCreateBitmap
+
+XftDraw *
+
+XftDrawCreateBitmap (
+
+Display *dpy,
+
+Pixmap bitmap)
+
+如果渲染目標是1位的位圖，應使用此函數，而非XftDrawCreate。
+
+XftDrawChange
+
+void
+
+XftDrawChange (
+
+XftDraw *draw,
+
+Drawable drawable)
+
+此函數切換下層的渲染目標，但不會影響XftDraw對象的其他屬性。應用程序應負
+責保證新的可畫物與原來的可畫物有相同的可視類型。
+
+XftDrawDisplay,XftDrawDrawable,
+
+XftDrawColormap,XftDrawVisual
+
+Display *
+
+XftDrawDisplay (
+
+XftDraw *draw)
+
+Drawable
+
+XftDrawDrawable (
+
+XftDraw *draw)
+
+Colormap
+
+XftDrawColormap (
+
+XftDraw *draw)
+
+Visual *
+
+XftDrawVisual (
+
+XftDraw *draw)
+
+這些函數簡單地從不透明地XftDraw結構中返回相關值。
+
+XftDrawDestroy
+
+void
+
+XftDrawDestroy (
+
+XftDraw *draw)
+
+此函數將銷毀XftDraw對象及其分配的任何私有數據，但引用的X可畫物並不銷毀。
+
+10.5 字形渲染
+
+有了XftFont和XftDraw，下一步就是使用它們在屏幕上顯示文本。這相對簡單，因
+為只用Unicode編碼，唯一需要改變的是如何保存字形。在這一節中還給出了一些
+便利函數，讓應用程序能使用與其他操作類似的數據結構。
+
+XftTextExtents
+
+void
+
+XftTextExtents<8,16,32,Utf8> (
+
+Display *dpy,
+
+XftFont *font,
+
+XftChar<8,16,32,8> *string,
+
+int len,
+
+XGlyphInfo *extents)
+
+這些函數測量指定字符串的顯示寬度，並在“extents”結構中返回。
+
+XftDrawString
+
+void
+
+XftDrawString<8,16,32,Utf8> (
+
+XftDraw *d,
+
+XftColor *color,
+
+XftFont *font,
+
+int x,
+
+int y,
+
+XftChar<8,16,32,8> *string,
+
+int len)
+
+這些函數中的每一個顯示一個字符串。若用渲染擴展，使用Over操作繪制字符串；
+若用核心機制，使用GXcopy繪制並且作用于所有平面。（譯注：原文最後一句為it
+is painted with GXcopy and a full planemask，plane指特定可視類型下的顏色
+平面，planemask是GC的成員，按位標記平面，說明繪制操作影響哪些平面；with
+a full planemask意味著影響所有平面）
+
+XftDrawRect
+
+void
+
+XftDrawRect (
+
+XftDraw *d,
+
+XftColor *color,
+
+int x,
+
+int y,
+
+unsigned int width,
+
+unsigned int height)
+
+這個簡單的函數用指定的顏色畫一個矩形。
+
+XftDrawSetClip
+
+Bool
+
+XftDrawSetClip (
+
+XftDraw *d,
+
+Region r)
+
+通過指定區域來設置XftDraw的裁減區（clip）列表，以後可能會增加使用矩形列
+表來指定區域的等同函數。
+
+10.6 字體列示
+
+Xft提供一套相對復雜的機制來列示可用字體，此機制不僅可以列出可用的字體
+face，還可以在不返回無關數據的前提下列出某種特定face的可用風格。為達到這
+個目標，應用程序在提供用于字體匹配的模式外，還要說明字體模式中哪些字段是
+重要的；對每種匹配的字體，都會根據應用程序提供的XftObjectList選中的字段
+生成返回列表中的一項，由這些項構成的無重復集合將返回給應用程序。
+
+列出字體是一個獨立于打開字體的基本過程，此過程中模式如何匹配字體的語義與
+10.3節中有所不同。在這種上下文中，匹配要求模式中每個元素必有值與相關字體
+元素精確匹配。
+
+XftObjectSetCreate
+
+XftObjectSet *
+
+XftObjectSetCreate (
+
+void)
+
+創建一個空的XftObjectSet。
+
+XftObjectSetAdd
+
+Bool
+
+XftObjectSetAdd (
+
+XftObjectSet *os,
+
+const char *object)
+
+在XftObjectSet中添加一個字段名。會分配新的存儲區，並從參數中復制字段名，
+這樣就允許應用程序能釋放或重用其存儲空間。
+
+XftObjectSetDestroy
+
+void
+
+XftObjectSetDestroy (
+
+XftObjectSet *os)
+
+The XftObjectSet is destroyed along with any other
+
+referenced storage.
+
+XftObjectSetBuild, XftObjectSetVaBuild
+
+XftObjectSet *
+
+XftObjectSetBuild (
+
+const char *first,
+
+...)
+
+XftObjectSet *
+
+XftObjectSetVaBuild (
+
+const char *first,
+
+va_list va)
+
+XftObjectSetBuild通過NULL結束的對象名列表創建XftObjectSet，使用此函數能
+快速構建一個名字的常量集合而避免一長串函數調用，其語義效果等同于一系列調
+用。XftObjectSetVaBuild使用一個可變參數列表完成同樣的工作。
+
+XftListFontsPatternObjects
+
+XftFontSet *
+
+XftListFontsPatternObjects (
+
+Display *dpy,
+
+int screen,
+
+XftPattern *pattern,
+
+XftObjectSet *os)
+
+對匹配“pattern”的每種字體生成一個新的模式，其中僅包括“os”所指定的元素；
+此函數把得到的新模式合並後返回，以保證其中沒有重復的模式。
+
+XftListFonts
+
+XftFontSet *
+
+XftListFonts (
+
+Display *dpy,
+
+int screen,
+
+...)
+
+可變參數包括一個NULL結束的模式元素列表，與10.2節中關于XftPatternBuild的
+描述一致，其後還有一個NULL結束的字段名列表，與本節中關于
+XftObjectSetBuild的描述一致。根據參數生成模式和對象集合後，此函數調用
+XftListFontPatternObjects並直接返回調用結果。
+
+10.7 訪問FreeType
+
+在需要與底層的FreeType函數庫或渲染擴展需要更復雜交互的地方，Xft提供一些
+函數以便直接訪問。
+
+XftFreeTypeGet
+
+XftFontStruct *
+
+XftFreeTypeGet (
+
+XftFont *font)
+
+此函數返回給定字體的底層XftFontStruct對象，當底層字體不是FreeType時返回
+NULL。
+
+XftRenderString
+
+void
+
+XftRenderString<8,16,32,Utf8> (
+
+Display *dpy,
+
+Picture src,
+
+XftFontStruct *font,
+
+Picture dst,
+
+int srcx, int srcy,
+
+int x, int y,
+
+XftChar<8,16,32,8> *string,
+
+int len)
+
+這四個相關函數都提供相對于使用渲染擴展畫文本更強的控制，它們提供一個任意
+源圖片（picture），用于填充文本。應用程序使用這些例程，還能更有效地緩衝
+源圖片。（譯注：Picture可能是FreeType引入的數據結構）
+
+
+
+11 字體信息緩衝
+
+如同7.1節所述，函數庫通過掃描配置文件中列出的目錄生成可用字體集合。要發
+現字體的特性需要使用FreeType打開字體文件，一大批文件需要處理，這可能會花
+費相當長的時間，尤其是字體很多的情況。
+
+為提高此操作的性能，Xft在兩個地方緩存搜索結果。每個目錄下可能有一個名為
+XftCache的文件，其中每一行列出了字體文件名、字體在文件的索引以及用
+XftPattern字符串格式表示的字體信息。如果一種字體沒有在任何XftCache文件中
+發現其信息，Xft會在用戶主目錄下生成一個.xftcache文件，其中包含字體文件
+名、字體索引、文件修改時間和XftPattern。
+
+XftCache文件由xftcache程序創建，該程序是Xfree86發布的一個標準部件。鼓勵
+用戶在要加入Xft配置文件的其他目錄下運行此程序，並且每當目錄內容改變時重
+新運行。Xft會自動管理每用戶的.xftcache文件內容，僅存放那些不在任何
+XftCache文件中的未知字體。
+
+Xft仍然會在開始時掃描每個目錄，但是會在使用FreeType打開文件前先檢查每目
+錄和每用戶緩衝中是否有相應文件名，這能在保持查詢字體目錄方法得到的精確性
+前提下，極大地減少應用程序的啟動時間。
+
+
+
+12 未來的研究方向
+
+Xft始于把X渲染擴展和FreeType光柵化器結合在一起的簡單努力，為了支持更多的
+應用程序，加入了一些新的能力。這些新功能都是必須的，但其中的一些已經超出
+了以X為中心的函數庫。特別是字體配置機制，應該從Xft中提出來放入一個單獨的
+函數庫，以便打印驅動程序和其他非X的字體使用者能共享該機制。這樣能確保所
+有應用程序，而不僅是那些在屏幕上顯示信息的程序，都能受惠于字體更易安裝、
+管理。
+
+Xft還需要支持國際化的額外能力。目前，XftFont對象引用單一FreeType字體，如
+果該字體沒有包括渲染特定文檔所需的全部字形，缺少的字形不會正確顯示。需要
+增加某種發現替換字形的機制，XftFont結構也應擴展以便使用多個底層FreeType
+字體face進行自動字形替換。
+
+對于那些不希望自動替換的應用程序，可能應該基于所需的Unicode字形子集匹配
+字體。字體文件中有字形覆蓋範圍的信息，應用程序應該能指定所需的字形範圍，
+而Xft應該基于該指定進行字體匹配。
+
+
+
+13 結論
+
+Xft的開發模型與大多數X開發不同，函數庫早期在其他項目中發布和集成，其他X
+項目等到基本穩定了才提交給社區中進行詳細評判。
+
+隨著對此函數庫的使用逐步增長，在沒有太多影響其他項目的情況下，一些主要的
+提高被加入。未來的增強可能需要改變現有應用程序，這應被視作發展過程的正常
+部分。此函數庫在很大程度上為Xfree86社區開闢了新天地，只有通過大範圍的使
+用和評判，才能開發出適當的體系結構。
+
+Xft的設計與實現進展很快，雖然僅在一年前啟動，Xft已經成為許多現在的X項目
+的基本組成部分。（譯注：原文發表于2001年11月在Oakland, California, USA舉
+行的Proceedings of the XFree86 Technical Conference）
+
+
+
+參考文獻
+
+[Pac01] Keith Packard. Design and Implementation of the X Rendering
+Extension. In FREENIX Track, 2001 Usenix Annual Technical Conference,
+Boston, MA, June 2001. USENIX.
+
+[SG92] Robert W. Scheifler and James Gettys. X Window System. Digital
+Press, third edition, 1992.
+
+[TT00] David Turner and The FreeType Development Team. The design of
+FreeType 2, 2000. http://www.freetype.org/freetype2/docs/design/.
+
+
+責任編輯:manux
+
+來源：Keith Packard
+
+
+Linux伊甸園 歡迎來信 <mailto:webmaster@linuxeden.com>交流
+Linuxeden.com <http://www.linuxeden.com> 1998-2002 All rights reserved
+
+
+----------------------------------------------------------------------------------------------------
+
+* 滑鼠游標設定
+
+在xf86 4.3中X Client使用了Xcursor庫來繪制透明帶陰影的光標
+光標的圖標位置符合freedesktop.org的標準,即會按照
+$HOME/.icons, /usr/share/icons,
+/usr/share/pimaps, /usr/X11R6/lib/X11/icons
+的順序查找圖標文件
+
+通過指定資源Xcursor.size和Xcursor.theme來修改配置,例如:
+在啟動的默認資源文件裡面($HOME/.Xdefaults or
+$HOME/.Xresources)添加:
+Xcursor.size: 16
+Xcursor.theme: redglass
+
+還可以通過修改/usr/X11R6/lib/X11/icons/default/index.theme
+將Inherits=whiteglass修改為Inherits=redglass
+新啟動的X Client的窗口中,鼠標就是紅色
+
+
+----------------------------------------------------------------------------------------------------
+
+* 安裝 NVIDIA 顯示卡驅動程式
+
+最進重新按裝 Debian 所以去了趟 http://www.nvidia.com 去找最新的 driver ，以下為按裝過程跟大家分享
+一．請先至 http://www.nvidia.com/view.asp?IO=linux 下載 NVIDIA-Linux-x86-1.0-4363.run
+二．以 root 的身份按裝 kernel-headers-x.x.xx 要與本機 kernel 版本相符
+#apt-get install kernel-headers-2.4.18-1-686
+三．按裝驅動程式
+#NVIDIA-Linux-x86-1.0-4363.run --kernel-include-path=/usr/src/kernel-headers-2.4.18-686/include
+（會出現詢問畫面，依指示選擇即可順利按裝）
+四．設定 XF86Config
+1.#dpkg-reconfigure xserver-xfree86
+（這是最簡單的方法）
+2.#XFree86 -configure
+（這個方法會產生設定檔 /root/XF86Config.new）
+3.cp /usr/share/doc/NVIDIA_GLX-1.0/XFree86Config.sample /etc/X11/XF86Config-4
+（這個方法最有趣不過要修改的地方比較多如 font path 和螢幕頻率等等）
+五．其它
+#XFree86 -xf86config /root/XF86Config.new
+（此參數可以幫我們測試 /root/XF86Config.new 是否有問題）
+#cat /var/log/XFree86.0.log|grep EE
+（這樣可以把 /root/XF86Config.new 錯誤列出，再用 nano /root/XF86Config.new 編輯、修改錯誤的部份） 
+
+
+----------------------------------------------------------------------------------------------------
+
+* 在非KDE環境下加快載入KDE程式速度
+
+在.xinitrc中加入
+
+kdeinit&
+dcopserver&
+kded& 
+
+
+----------------------------------------------------------------------------------------------------
+
+* 開啟 X Window 4.x dpms 省電功能
+
+ 在新的XFree86-4.x 之後, DPMS省電模式需要使用者在XF86Config裡的 Section Monitor加上一行option "dpms"，以下是我的XF86Config 節錄
+
+     Section "Monitor"
+         Identifier  "My Monitor"
+         HorizSync   31.5-130    
+         VertRefresh 55-160  
+         Option      "DPMS"
+     EndSection            
+     
+
+ 之後就可以下底下指令：
+
+ # xset +dpms ; xset dpms 1200 1500 1800
+
+ 三個數字分別為standby, suspend, off的時間, 以秒計算 man xset :)
+
+----------------------------------------------------------------------------------------------------
+
+* 將其它 Windows Manager 的選單匯入 XFCE4
+
+	去 sf.net 找 MenuMaker, 下載解開後以 root 身份執行 ./setup.py install 安裝
+	執行 mmaker XFce4 即可將其它支援的 Windows Manager 的選單匯入右鍵選單
+
+	註: 目前此程式還不支援多語言, 產生出來的選單都是英文的
+	註: 用此程式產生出來的選單會將預設可切換工作區, 程式等部份都清掉. 若要保留該部份可以把 /etc/xfce4/menu.xml 中所需部份複製到 ~/.xfce4/menu.xml 記得用 vim 編輯的話要 set enc=utf-8 與 set tenc=big5 才能正確看到中文
+
+----------------------------------------------------------------------------------------------------
+
+* 更換滑鼠游標方法
+
+	到 www.themedepot.org, 選左方的 Mouse Pointer, 再挑出自己喜歡的. 目前我是採用 Signal OS Cursors. 依據裡面的安裝說明安裝後即可. 茲將安裝說明節錄如下:
+
+$ mkdir .icons
+$ cd .icons
+$ tar zxvf /path/to/theme.tar.gz
+$ mkdir default
+$ echo "[Icon Theme]" > default/index.theme
+$ echo "Inherits=signalos" >> default/index.theme
+
+and restart your X server :) 
+
+	註: 游標檔以 Xcur 開頭, 不知道要用什麼程式產生/編輯.
+	註: 上述網站有包含各 Windows Manager 用的 themes
+
+----------------------------------------------------------------------------------------------------
+
+* 可以用 start 進入 x window; 但無法用 gdm
+
+	今天嘗試著將 kernel 升級到 2.6, 因此對 /etc/rc.sysinit (與 /etc/rc.d/rc.sysinit 相同)做了些修改. 但還沒測試, 只不過重開機, 當系統出現 gdm 的登入畫面時鍵盤就失效. 以下是測試結果:
+
+	1. /var/log/XFree86.0.log 沒有任何 EE 訊息
+	2. 若從 Runlevel 3 進入 Runlevel 5 則一樣鍵盤會失效
+	3. 若從 Runlevel 3 執行 startx 可以使用 x window ,沒問題
+
+	經過大量的測試後, 發現將 /etc/X11/gdm/gdm.conf 恢復為預設值就沒問題了. 再追蹤後才發現當初為了恢復 /etc/rc.d/rc.sysinit 時是將檔案直接刪除再用 rpm 重裝 initscripts. 但是該套件內預設的 /etc/inittab 會將 tty1 ~ tty6 都打開文字終端機; 而 x window, gdm.conf 預設是對應到 tty7. 但是我改過的 gdm.conf 會用 tty3. 可能就是這樣子, mingetty 及 gdm 一起搶 tty3, 被 mingetty 搶走了(因為它一開機就執行) 導致這問題. 將 /etc/inittab 內 tty3 ~ tty6 都關閉後, 並設定 gdm.conf 用 tty3 就沒鍵盤失效的問題.
+
+----------------------------------------------------------------------------------------------------
+
+* 安裝 Xilinx ISE 6.1i for Linux
+
+	踹了好久......問題是出在 DISPLAY 不能設成 :0.0 只能設成 :0 
+
+	另外, 序號直接用 Windows 版的產生器即可. 比較麻煩的是裝第二片時序號及安裝目錄要手動重填.
+
+	export DISPLAY=:0
+	/mnt/cdrom/setup
+
+	依此方法安裝好兩片後（Service Pack也是用相同的方法安裝）
+
+	假設裝在 /usr/local/Xilinx
+
+	chmod 755 /usr/local/Xilinx/settings.*
+
+	以後，只要有source過上述的 settings.sh 並設定好 DISPLAY=:0 即可直接執行 ise 啟動 ISE 6.1i
+
+----------------------------------------------------------------------------------------------------
+
+* 香港 Big5HKSCS 字型終於被 X11 全面支援!
+
+	摘自 http://firefly.idv.tw/test/Forum.php?Board=1&Article=f2485753ef81e1fc8ff88d09292722cd&Func=view&History=0
+
+加上額外的安裝部驟後，XFree86 終於可以全面支援 ming_uni.ttf 及其他有 Big5HKSCS 編碼的 True Type Font 字型了！ :D
+
+要感謝 Jungshik Shin 不斷的努力測試。
+http://bugzilla.mozilla.org/show_bug.cgi?id=226183#c31
+
+現將這些 額外的安裝部驟 翻譯成中文：
+
+1. 從 XFree86 CVS 下載 big5hkscs-0.enc 檔案：
+http://cvsweb.xfree86.org/cvsweb/xc/fonts/encodings/large/big5hkscs-0.enc
+
+2. 用 gzip 壓縮後，把 big5hkscs-0.enc.gz 抄進 這個目錄：
+
+/usr/X11R6/lib/X11/fonts/encodings/large
+
+肯定這檔案為可讀，以 root 身份 鍵入 'chmod a+r big5hkscs-0.enc.gz'
+
+3. 修改以下兩個檔案：
+
+/usr/X11R6/lib/X11/fonts/encodings/encodings.dir
+/usr/X11R6/lib/X11/fonts/encodings/large/encodings.dir
+
+把這句同時加入它們之中：
+
+big5hkscs-0 /usr/X11R6/lib/X11/fonts/encodings/large/big5hkscs-0.enc.gz
+
+另外把以上兩個檔案開頭的 數字 加一：如 70 加一 為 71。
+
+4. 下載 《香港增補字符集 2001 for Linux》
+（注意事項 五 為純字型檔下載）
+
+5. 若連輸入法一起安裝，在 Red Hat 上 該檔 (ming_uni.ttf)
+會放在 /usr/share/fonts/zh-TW/Truetype
+
+6. 進入該目錄修改 fonts.scale 及 fonts.dir 增加以下這句（註1）
+
+ming_uni.ttf -misc-Ming for ISO10646 -medium-r-normal--0-0-0-0-p-0-big5hkscs-0
+
+同樣你亦要為 那兩個檔案 開頭的數字 加一。
+
+7. 重新啟動 X font server (在 Red Hat, Mandrake 及 SuSE 'service xfs restart' 應能達成).
+
+如果不行，檢查 'xfs' 的 pid，鍵入 'ps -ef | grep xfs'
+並 輸送 HUP signal: 鍵入 'kill -HUP Pid_of_xfs'
+
+8. 檢查所有東西是否安裝妥檔：
+
+$ xlsfonts | grep big5hkscs
+$ xfd -fn '-misc-Ming for ISO10646 -medium-r-normal--0-0-0-0-p-0-big5hkscs-0'
+
+確認你能在 xfd 的介面裡 前後審閱 並看到中文字。
+
+9. 如你喜歡，可以通知香港特區政府更新其 Linux 安裝套件使你們可以不用重複以上的部驟 :-)
+
+註1：XFree86 bug 884 修正後，'mkfontscale; mkfontdir; chkfontpath' 應能成功（檢測得 -big5hkscs-0 的編碼）。Juliuscz 的 mkfontscale 修正檔亦應可這樣做。
+
+總結：以上部驟完成後會讓沒有使用 fontconfig/freetype2 的程式都能使用 ming_uni.ttf 裡的香港字型；當然 freetype2 是大勢所趨，不過像 Xcin 或 其他 X11core 的輸入程式應能受惠。他日推出 有包含香港字的 TTF 字型亦能被使用。 :)
+	
+補充：
+
+在上面 部驟4 ，若用戶只進行字體安裝，那便要自行建立新目錄，或選用 現存目錄路徑 安裝新字型。
+
+由於以不更動系統內的字型資料為前題，現選用 建立新目錄 的方法：
+
+假設建立新目錄為 /usr/share/fonts/big5hkscs
+解壓 ming_uni.ttf.gz，把 ming_uni.ttf 抄進該目錄內。
+
+接著在該目錄執行
+
+# mkfontscale
+# mkfontdir
+
+然後告訴系統新增的字型路徑 (fontpath):
+
+# chkfontpath -a /usr/share/fonts/big5hkscs
+
+最後使用 fc-cache 告訴 fontconfig2 素描系統搜索新字型：
+
+# fc-cache -f -v
+
+完成這些後便可回到 部驟6 後。
+
+----------------------------------------------------------------------------------------------------

@@ -1,0 +1,135 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+轉貼自: http://www.linuxyes.com/tw/tutorial/xinetd.html
+網路上的安全-xinetd vs inetd
+
+在Red Hat 7.0之前開啟或關閉服務是經由/etc/inetd.conf檔。但是當系統昇級到Red Hat 7.1之後，inetd己經不存在，而是被稱為xinetd的程式所取代。更糟的是，在一心期待昇級到Red Hat 7.1之後，卻不能完全依自己的習慣方式工作而且也無法從客戶端登入，並且/etc/inetd.conf檔也己經不見了。這些都是更換成xinetd後的第一印象。
+
+在同一標準上xinetd和inetd是相同的。我們可以比喻inetd的角色就如同是電話總機一樣，當你詢問你想找的人時(網路上的TCP埠或服務)，且假設所有的情況良好(TCP wrapper准許你進入)，總機就會將你接上你要找的人。但是假如只是相當簡單地服務連結，你可能會問為什麼inetd會被替換成xinetd呢?那是因為我們想要注意綱路上最重要的一件事：安全。
+
+Xinetd是對舊有的inetd加強很多功能，包含慎密的記錄、連結進入之限制(防止拒絕服務-Denial of Service的攻擊)及在單機和遠端的連結方面具有靈活的存取控制。關於設定xinetd的檔案是放在/etc/xinetd.conf檔中。
+
+假如你檢視你的/etc/xinetd.conf，你將會注意到它似乎非常簡單，讓我們來看一下內容：
+
+defaults
+
+{
+
+instances = 60
+log_type = SYSLOG authpriv
+log_on_success = HOST PID
+log_on_failure = HOST
+only_from = 192.168.22.0 127.0.0.1
+
+}
+
+includedir /etc/xinetd.d
+
+
+
+預設的段落設定系統上所有的服務。在檔案中的末行之includedir是要告知xinetd到那裏去尋找系統上其他指定的服務。假如你在/etc/xinetd.d目錄下打入ls，你將會找到如echo, finger, rlogin及telnet等標準服務之名稱。
+
+
+
+請特別注意only_from那一行，xinetd增加安全性的方式之一是透過約束機制允許只有特定的服務可在特定的界面上運行。換句話說，你可以在eth0上開放FTP存取到你的內部網路上，但不能開放FTP存取在外部的網路介面上-eth1。當你第一次安裝或昇級時，你可以注意到只有在127.0.0.1 時允許進入。既然我的內部網路是在192.168.22.0，我加入了網路位址(我的eth0)到only_from這一行之中。
+
+如同變更到/etc/inetd.conf檔中一樣，它必須重新啟動daemon，變更才能生效。為了執行上述的動作，你可發送出－SIGUSR1或SIGUSR2到xinetd的程序中，你可經由執行ps ax | grep xinetd的指令去尋找程序之ID。這樣會有兩種可能的情形一是發送SIGUSR1執行一個軟性的重設(software reset)或是執行一個硬性的重設(hardware reset)，就大部分的的情況而言，兩種情形是相同的但假如你變更你的xinetd.conf檔且關閉一服務，則任何存在的連結都將被終止。然而SIGUSR1將會重新讀取組態檔並將變更用到新的連結上所以假設我想要執行一xinetd軟性的重設則可以依下列方法執行：
+
+#ps ax | grep xinetd
+
+529 ? S 0.00 xinetd –stayalive –reuse –pidfile /var/run/xinetd.pid
+
+#kill -USR1 529
+
+舉一個rsh組態檔為例，這是一個在/etc/xinetd .d目錄下的文字檔稱為”rsh”。
+
+service shell
+
+{
+
+socket_type = stream
+wait = no
+user = root
+log_on_success += USERID
+log_on_failure += USERID
+server = /usr/sbin/in.rshd
+disable = yes
+
+}
+
+即使我們在/etc/xinetd.d目錄中有服務的定義，並不表示服務是有用或是啟動的。最未一行”disable = yes”是表示我們已關閉此服務。如果要啟動此服務須設為
+
+“disable = no”
+
+什麼是關於記錄的部分？假設我們看default的段落log_type的參數標明為” SYSLOG authpriv”，再觀看/etc/syslog.conf檔搜尋authpriv時可知記錄是在/var/log/secure下
+
+authpriv.* /var/log/secure
+
+假如你要將記錄檔存在其他的檔案，你可以明確地說明其檔案的參數，像是下列所示：
+
+log_type = FILE /var/log/xinetd.log
+
+我們重新啟動xinetd則log會記錄到一個全新的檔案中。
+
+#tail /var/log/xinetd.log
+
+01/7/18@16:38:03: START: pop3 pid=32665 from=127.0.0.1
+01/7/18@16:40:05: START: telnet pid=32671 from=127.0.0.1
+01/7/18@16:41:48: START: pop3 pid=32730 from=127.0.0.1
+01/7/18@16:43:13: START: pop3 pid=32730 from=127.0.0.,1
+
+請注意一下所有START的標記，假如你要去記錄服務何時退出時，你可以變更你的log_on_success來包含EXIT的參數如下列所示：
+
+log_on_success = HOST PID EXIT
+
+如此我們的記錄檔可以取得更多資訊，但這卻是相當龐大的。但如果我們要去記錄某些服務到它們指定的特殊位置，這如何做呢？以辦公室中最繁忙之POP3 service為例
+
+service pop3
+
+{
+
+disable = no
+socket_type = stream
+wait = no
+user 　= root
+server = /usr/sbin/ipop3d
+log_on_success += USERID
+log_on_failure += USERID
+log_type = FILE /var/log /ipop3.log
+
+}
+
+
+
+假設如上列所示，xinetd依舊會記錄所有資訊，但POP3的記錄會存到 /var/log /ipop3.log中。
+
+讓我們看一些其他較有用的參數，我們曾經提及對特定的服務而言可限定連結進來的總數，這可由instance的參數來完成。事實上預設值可讓所有的服務具有無限制的連結總數。但是假如我不要超過50個pop3的連結，我會增加這一行到我的ipop組態檔中。
+
+instances = 50
+
+另外一個不錯的參數你可以加入的是一個連結標題。例如，當某人使用telnet連入主機時，我們可以致上一段小而美的訊息，去恭賀他們並告訴他們是如何的聰明過人。
+
+為了執行這一動作，我建立了一個文字檔案，一旦他們連結上就可以看到這段文字，然後我在telnet服務下新增下列這行：
+
+banner = /usr/local/misc/telnet.txt
+
+當使用者運用telnet連結到系統上時，我們可以得到像下列所示：
+
+
+$telnet localhost
+Trying 127.0.0.1 …
+Connected to localhost
+Escape character is ‘^]’
+Hey wow, you connected! Aren’t you clever!
+
+
+----------------------------------------------------------------------------------------------------
+
+* 透過xinetd讓proftpd有兩個埠可連入
+
+	將/etc/xinetd.d/proftpd另外複製一份（放在同目錄，檔案名不同），並在該檔案中加上port=要用的埠號。記得重新啟動xinetd。
+
+	註：在RedHat8以上方法可行，但是到了RedHat9後仍然只有監聽埠21,經過測試，問題在檔案第一列的services後的字，原本是ftp，要額外取別的名字（我是用ftp8102），並修改/etc/services中相關設定。
+
+----------------------------------------------------------------------------------------------------

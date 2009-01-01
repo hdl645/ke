@@ -1,0 +1,243 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+全文取自:二林網管
+一、
+　　當在一台PC機上安裝了Linux系統，你就擁有了一個強大的、高級的、多工的網路作業系統。但時候該系統功能有些過於強大了些。某些發佈版本缺省啟動很多服務(如：rlogind, inetd, httpd, innd, fingerd,timed, rhsd,等等)。作為系統管理員需要熟悉瞭解這些服務。若機器連接了Internet，就更需要關自己系統的安全。
+　　大多數攻擊者並不是一個革新者，他們往往利用最新的公佈的系統工具技術等突破一個所周知的或 一個新的剛剛發現的安全漏洞。但作為一個管理者，通過訪問你使用的Linux發佈的官方站點如
+http://www.redhat.com/、http://www.calderasystems.com/等可以獲知最新的安全漏洞及相應的補丁程式。也可以通過定
+期訪問http://www.securityfocus.com/、http://www.cert.org/等安全漏洞通告站點。
+　　控制訪問伺服器的最方便的方法是通過一個叫TCP wrapper的程式。在大多數發佈版本中該程式往往是缺 省地被安裝。利用TCP wrapper你可以限制訪問前面提到的某些服務。而且TCP wrapper的記錄檔記錄了所有的企圖訪問你的系統的行為。通過last命令查看該程式的log，管理員可以獲知誰企圖連接你的系統。
+　　在Linux的/etc目錄下，有一個如下所示inetd.conf檔，該檔是TCP wrapper的配置檔，定義了 TCP wrapper可以控制啟動哪些服務。比如要將finger服務去除，就將finger服務的那一行注釋掉(在前面 加上#即可);
+# inetd.conf This file describes the services that will be available
+# through the INETD TCP/IP super server. To re-configure
+# the running INETD process, edit this file, then send the
+# INETD process a SIGHUP signal。
+
+#
+
+ftp stream tcp nowait root /usr/sbin/tcpd in.ftpd -l -a
+telnet stream tcp nowait root /usr/sbin/tcpd
+in.telnetd
+# Finger， systat and netstat give out user information which may be
+...............
+　　但是對於諸如sendmail，named等服務，由於它們不象finger，telnet等服務，在請求到來時由inet守護進程啟動相應的進程提供服務，而是在系統啟動時，單獨作為守護進程運行的。在slackware版本的Linux，可以通過修改/etc/rc.d目錄下的啟動配置檔rc.M文件，將啟動sendmail的命令行注釋掉：
+#!/bin/sh
+# rc.M This file is executed by init(icon_cool.gif when the system is being
+# initialized for one of the multi user run levels (i.E.
+# levels 1 through 6). It usually does mounting of file
+# systems et al.
+# Start the sendmail daemon:
+# if [ -x /usr/sbin/sendmail ]; then
+# echo 'Starting sendmail daemon (/usr/sbin/sendmail -bd -q 15m)… '
+# /usr/sbin/sendmail -bd -q 15m
+# fi
+............
+　　(注：對於redhat發佈，可以鞏固運行chkconfig命令或linuxconfig命令來管理是否啟動某項服務，如： chkconfig --level 345 sendmail on 來實現系統在345運行級別下自動啟動sendmail) 對於諸如named等其他服務，也是通過將同一個目錄下相應啟動配置檔中相應的啟動命令注釋掉，從而當你重新啟動機器時，相應的服務將不會啟動。而對於高版本的redhat linux，提供了一個linuxconfig命令，可以通過它在圖形介面下互動式地設置是否在啟動時，運行相關服務。但是對於telnet、ftp等服務，如果將其一同關閉，那麼對於管理員需要遠端管理時，將非常不方便。
+　　Linux提供另外一種更為靈活有效的方法來實現對服務請求用戶的限制，從而可以在保證安全性的基礎上， 使可信任用戶使用各種服務。
+　　在/etc目錄下，有兩個檔：hosts.deny hosts.allow 通過配置這兩個檔，你可以指定哪些機器可以使用這些服務，哪些不可以使用這些服務。配置這兩個檔是通過一種簡單的訪問控制語言來實現的，訪 問控制語句的基本格式為：程式名列表，主機名/IP位址列表。
+　　程式名列表指定一個或者多個提供相應服務的程式的名字，名字之間用逗號或者空格分隔，可以在 inetd.conf檔裏查看提供相應服務的程式名：如上面的檔示例中，telent所在行的最後一項就是所 需的程式名：in.telnetd 主機名/IP位址列表指定允許或者禁止使用該服務的一個或者多個主機的標識，主機名之間用逗號或空格分隔。程式名和主機位址都可以使用通配符，實現方便的指定多項服務和多個主機。當服務請求到達伺服器時，訪問控制軟體就按照下列順序查詢這兩個檔，直到遇到一個匹配為止：
+　　1. 當在/etc/hosts.allow裏面有一項與請求服務的主機位址項匹配，那麼就允許該主機獲取該服務
+　　2. 否則，如果在/etc/hosts.deny裏面有一項與請求服務的主機位址項匹配，就禁止該主機使用該項服務
+　　3. 否則允許使用該服務 如果相應的配置檔不存在，訪問控制軟體就認為是一個空檔，所以可以通過刪除或者移走配置文 件實現對所有主機關閉所有服務。
+　　在檔中，空白行或者以#開頭的行被忽略，你可以通過在行前加 # 實現注釋功能。Linux提供了下面靈活的方式指定進程或者主機列表:
+　　1. 一個以'.'起始的功能變數名稱串，如 .amms.ac.cn 那麼www.amms.ac.cn就和這一項匹配成功
+　　2. 以'.'結尾的IP串如 202.37.152. 那麼IP地址包括202.37.152. 的主機都與這一項匹配
+　　3. 格式為n.n.n.n/m.m.m.m表示網路/遮罩，如果請求服務的主機的IP位址與遮罩的位與的結果等於n.n.n.n 那麼該主機與該項匹配。
+　　4. ALL表示匹配所有可能性
+　　5. EXPECT表示除去後面所定義的主機。如:list_1 EXCEPT list_2 表示list_1主機列表中除去List_2所列出的主機
+　　6. LOCAL表示匹配所有主機名中不包含'.'的主機 上面的幾種方式只是Linux提供的方式中的幾種，但是對於我們的一般應用來說是足夠了。
+　　我們通過舉幾個例子來說明這個問題：
+　　例一：我們只希望允許同一個局域網的機器使用伺服器的ftp功能，而禁止副廣域網上面的ftp服務請求， 本地局域網由 202.39.154. 、202.39.153. 和202.39.152. 三個網段組成。在hosts.deny檔中，我們定義禁止所有機器請求所有服務： ALL:ALL 在hosts.allow檔中，我們定義只允許局域網訪問ftp功能： in.ftpd -l -a: 202.39.154 202.39.153. 202.39.152. 這樣，當非局域網的機器請求ftp服務時，就會被拒絕。而局域網的機器可以使用ftp服務。 ALL:ALL 然後重新啟動你的 inetd進程： /etc/rc.d/init.d/inet restart 但是hosts.deny檔只能控制/etc/inetd.conf檔中包含的服務的訪問這些服務有/usr/bin/tcpd管 理。TCP wrapper監聽接入的網路請求，然後與在hosts.allow和hosts.deny的中的服務比較，然後做出允 許或拒絕的決定。但是對於wrapper沒有包含的服務你就需要採用其他方法了
+二、
+　　保護你的系統最簡單有效的的方法是TCP wrapper.Linux系統在跟蹤對你的機器的訪問記錄方面作了大量的工作。wrapper拒絕對你的系統的某些訪問的同時,系統在一些LOG檔中增加了一些資訊內容。在/var/log
+目錄下,一般可以看到如下檔：
+boot.log cron cron.1 cron.2 dmesg httpd
+lastlog lastlog.1 maillog maillog.1
+maillog.2
+messages messages.1 netconf.log
+netconf.log.1
+netconf.log.2 secure secure.1 secure.2
+secure.3 secure.4 spooler spooler.1 spooler.2
+uucp wtmp wtmp.1 xferlog xferlog.1
+xferlog.2
+　　可以看到某些LOG檔有1,2等副檔名。這是由於系統運行cron.daily引起的。實際上，cron.daily是在/etc下面的子目錄，包含了很多系統自動運行的管理script檔。不需要你參與，這些script實現一些任務的自動化：如輪轉log檔使其不會變的過分大。作為管理員你應該熟悉如何通過修改這些script來定時運行程式。當然，現在有很多功能完善的文本模式或圖形模式的log檔分析器，自動發現危險的攻擊跡象，然後象管理者發送信件。在http://www.freshmeat.net/、tucows等可以找到很多這樣的工具。
+　　從攻擊者的觀點而言，他們對你的你伺服器上的安全檔最感興趣。若你關閉外部網路對你的伺服器的訪問。你可能會遇到這樣的情況：
+[root@linux /]#grep refused /var/log/secure*
+Sep 12 07:52:42 netgate in.rlogind[7138]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:52:52 netgate in.rshd[7139]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:52:55 netgate in.rexecd[7144]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:52:59 netgate imapd[7146]: refused connect
+from 2??.?.5?.42
+Sep 12 07:52:59 netgate in.fingerd[7142]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:53:00 netgate ipop3d[7143]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:53:07 netgate in.ftpd[7147]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:53:10 netgate gn[7145]: refused connect
+from 2??.?.5?.?42
+Sep 12 07:53:22 netgate in.telnetd[7149]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:56:34 netgate imapd[7150]: refused connect
+from 2??.?.5?.?42
+　　正如你看到的那樣，攻擊者已經試圖連接伺服器上的若干個埠。但是由於伺服器關閉了inetd啟動的所有服務，所以LOG系統記錄下了這些訪問拒絕。若在你的機器中沒有發現這樣的服務拒絕並不能說明你的機器沒有被攻擊。maillog檔將保存那些通過伺服器被轉發的email資訊。xferlog保存ftp的log資訊等等。
+　　若你希望查看wtmp，你可以使用last命令
+# last | more fishduck ttyp6 nexus Tue Sep 28 16:03
+still logged in birdrat ttyp5 speedy Tue Sep 28 15:57 still logged
+　　 in root tty1 Tue Sep 28 12:54 still logged in
+　　將顯示誰什麼時候登陸進來,登陸了多長時間等資訊。通過查看你可以發現非法登陸者資訊。 你也可以查看以前的wtmp檔如wtmp.1，你可以用命令： # last -f /var/log/wtmp.1 | more 但是你還需要注意你的log檔的狀態資訊，如果它特別小或者大小為0 則說明可能有攻擊者進入系統，並 且修改了這個檔。為了防止任何用戶修改某些檔，如對log檔只允許添加，而不允許刪除操作等等：可以通過使用Linux Intrusion Detection System可以防止攻擊者修改LOG檔password 檔等。該工具可以在啟動lilo時來決定是否允許對某些特定檔的修改。該工具的詳細資訊可以通過訪問 www.soaring-bird.com.cn/oss_proj/lids/index.html獲得。 系統的所有進程的祖父進程被成稱為'init'，其進程ID號是1。你可以通過下面的命令,看到init進程資訊。 # ps ax | grep init 1 ? S 6:03 init 系統在啟動時的init進程將會啟動'inetd'進程，正如前面提到的該進程實現監聽網路請求，監聽是通過網 絡埠號來實現的。例如你telnet到你的linux伺服器上時，實際上你上請求inetd進程啟動進程in.telnetd進程在23埠來處理你的訪問請求實現通信。隨後，in.telnetd進程啟動一個詢問你的用戶名和密碼的進程， 然後你就登陸到機器了。inetd同時監聽很多埠來等待訪問請求，然後啟動完成相關服務的程式。你可以通過查看檔/etc/services來看哪個服務使用哪個埠。從節省資源角度來說，利用一個進程而不是每種服務對應一個進程是有意義的。 當一個攻擊者第一次訪問你的站點時，他們往往使用成為埠掃描器的工具，通過該工具攻擊者來查看你開放了那些系統服務。LInux上比較出名的一個埠掃描器是nmap. 可以從http://www.insecure.org/nmap/index.html下載得到該軟體，最新的版本甚至有一個圖形化介面nmapfe。下面我們就運行nmap看可以得到什麼結果： 選項'-sS',指使用TCP SYN, 也就是半連接half-pen掃描, '-O',只同時探測被掃描系統的作業系統o。（利用OS指紋的技術，可以參見http://www.isbase.com/book/showQueryL.asp?libID=271）攻擊者知道了對方使用的何種作業系統就可以有針對性的尋找該作業系統的常見漏洞
+# nmap -sS -O localhost
+
+
+Starting nmap V. 2.3BETA5 by Fyodor (fyodor@dhp.com,
+www.insecure.org/nmap/)
+Interesting ports on localhost (127.0.0.1):
+Port State Protocol Service
+21 open tcp ftp
+23 open tcp telnet
+25 open tcp smtp
+53 open tcp domain
+79 open tcp finger
+80 open tcp http
+98 open tcp linuxconf
+111 open tcp sunrpc
+113 open tcp auth
+139 open tcp netbios-ssn
+513 open tcp login
+514 open tcp shell
+515 open tcp printer
+
+TCP Sequence Prediction: Class=random positive increments
+Difficulty=4360068 (Good luck!)
+Remote operating system guess: Linux 2.1.122 - 2.2.12
+
+Nmap run completed -- 1 IP address (1 host up) scanned in 2
+seconds
+　　這些打開的埠就是攻擊者入侵點。當你修改過inetd.conf檔以關閉某些服務，從新啟動inetd後，你 再用nmap掃描就可以發現被注釋掉的服務掃描不到了。
+　　當然，管理員還可以使用一些其他的安全掃描工具如：satan或Nessus等 來檢測自己的系統的安全可靠性，在攻擊者發現其以前更早的發現自己的系統的漏洞，並加以彌補。
+三、
+　　一個笑話裏說一個小偷進入到一家，偷光了屋子裏所有的東西，但是卻用一個相同的東西代替了偷走的東西。但是在網路世界裏，這卻是可能發生的。一個攻擊者利用一個系統漏洞非法入侵進入到你的系統後，當你使用ps命令列出系統中的所有的進程時，卻看不到什麼異常的證據。你查看你的password檔，一切也是那麼的正常。到底發生了什麼事情呢？當系統進入到你的系統以後，第一步要做的事情就是取代系統上某些特定的檔：如netstat命令等。當你使用netstat -a命令時，就不會顯示系統攻擊者存在的資訊。當然攻擊者將替代所有的可能洩露其存在的檔在linux環境下一個有名的這樣的工具包名字是rootkit。通過在任何一個搜索引擎搜索關鍵字rootkit可以得到數以百計的結果。這些工具一般來說包括：
+ps netstat top .....
+　　由於這些經過檔已經被取代。所以簡單的利用ls命令查看這些檔是看不出什麼破綻的。有若干種方法你可以驗證系統檔的完整性。如果你安裝的是Red Hat, Caldera, TurboLinux或任何使用RPM的系統。你可以利用RPM來驗證系統檔的完整性：首先你應該查明你的那些你需要查看的檔來自哪個套裝軟體，使用rpm命令你可以查明某個檔屬於某個包： # rpm -qf /bin/netstat net-tools-1.51-3 然後，可以掃描整個rpm包來查看那些發生了改變。對沒有發生改變的包使用該命令將沒有任何輸出資訊，如下所示：
+rpm -V net-tools
+　　將netstat的5.2版本的二進位可執行檔替換為6.0的版本以後再使用該命令的結果為：
+.......T /bin/netstat
+　　這說明/bin/netstat/檔已經被修改。若我使用rpm -qf測試ps和top命令可以得到其屬於包procps，然後再驗證包procps的完整性。下面是一個被'黑'的站點的結果：
+# rpm -qf /bin/ps procps.2.0.2-2
+# rpm -V procps
+SM5..UGT /bin/ps
+..UGT /usr/bin/top
+　　攻擊者入侵到系統中，並且用自己的ps及top命令替代了我們系統中的命令。從而使管理員看不到其運行的進程，也許是一個sniffer來監聽所有的用戶所有進出網路的資料並找尋到密碼資訊。下面是一個小的script來掃描你系統的所有的rpm庫，並檢查所有的包是否被篡改。但是應該注意的是並不是所有該scripts報告的問題都是說明該系統檔被攻擊者破壞。例如你的password檔一般肯定和你安裝系統時是不同的：
+#!/bin/bash
+#
+# Run through rpm database and report inconsistencies
+# for rpmlist in `rpm -qa`
+# These quotes are back quotes
+do echo ' ----- $rpmlist -----' ;
+rpm -V $rpmlist done > /tmp/rpmverify.out
+　　當你運行該scripts時，輸出被定向到檔/tmp/rpmverify.out你可以使用less命令查看該檔。但是由於文字檔案如：/etc/passwd, /etc/inetd.conf等很可能顯示為被修改過。但是你如何知道這些是管理員自己修改的還是入侵者修改的呢？方法是：
+　　在你確保你的系統是乾淨的，沒有被攻擊者入侵時，你為這些系統檔創建指紋資訊。在你懷疑你的系統被入侵時使用這些這些指紋資訊來判定系統是否被入侵。創建檔的指紋資訊是通過命令md5sum來實現的：
+# md5sum /etc/passwd
+d8439475fac2ea638cbad4fd6ca4bc22 /etc/passwd
+
+# md5sum /bin/ps
+6d16efee5baecce7a6db7d1e1a088813 /bin/ps
+
+# md5sum /bin/netsat
+b7dda3abd9a1429b23fd8687ad3dd551 /bin/netstat
+　　這些資料是我的系統上的檔的指紋資訊。不同的系統上的檔的 指紋資訊一般是不同的，你應該是使用md5sum來計算自己系統檔的指紋資訊。下面是一些你應該創建指紋資訊的檔；
+/usr/bin/passwd /sbin/portmap /bin/login /bin/ls
+/usr/bin/top /etc/inetd.conf /etc/services
+　　通過指紋資訊你可以決定是否有系統檔被篡改。
+四、
+　　上一節中說過，當netstat,ls等命令被修改，從而發現系統已經被入侵，下面該怎麼辦？根據你系統的重要性的不同，你有很多種選擇。但是我推薦對用戶目錄，password及其他關鍵的系統檔進行備份。然後重新安裝系統。但是不要隨便就將備份的檔拷貝到新系統，因為攻擊者可能在這些檔中隱藏一些非法的東西。
+　　也可以不重新安裝系統，而是通過TCP wrapper來限制對主機的訪問，並且關閉非關鍵的網路服務。然後更新被影響的包。重新'乾淨'的啟動系統是很重要的，但是要實現這點並不容易。若你發現procps或net-tools包已經被攻擊者修改，第一件事情是重新安裝乾淨的包來替換被攻擊者做了手腳留下後門的包。一般最好從你的系統發佈者處得到最新的包來重新安裝。
+　　一旦攻擊者進入到系統其就將在系統上存放一些工具並且將之隱藏起來，使你不容易發現。下面是一個被攻擊者入侵的系統的實例。當系統被攻擊者入侵，伺服器被限制網路訪問，並且替代所有的受影響的包。然後就需要通過仔細查看log檔來發現重複的企圖進入系統。查看/etc/passwd檔，發現一個不屬於合法的用戶。進入到該用戶的目錄下：/home/jon，運行 'ls -l'得到如下的內容：
+. .. .. .bashrc .bash_history .screenrc emech.tar.gz
+　　除了一個名字為emech.tar.gz的檔以外，看不出什麼異常現象。但是仔細觀察，你就會發現系統有兩個'..'目錄。(指該子目錄的上一級目錄)是的確很奇怪，我使用命令'cd ..'我就會進入到/home目錄。原來其中子目錄名字是在兩個點後面有一個空格。（'.. '）你可以通過如下命令發現：
+# cd /home/jon
+# echo .* | cat -v
+. .. .. .bashrc .bash_history .screenrc emech.tar.gz
+　　仔細觀察可以發現每個子目錄都是被一個空格隔開，而在第二個“..”和.bashrc之間有兩個空格。這就
+意味著第二個'..'子目錄其實為點-點-空格。下面進入到該目錄：
+# cd '.. '
+　　然後列出該目錄下的內容：
+#ls
+
+randfiles mech.set mech.pid checkmech cpu.memory
+mech.help mech.usage mech mech.levels emech.users psdevtab
+　　下一步我們再查看是否其還在其他地方隱藏了檔：
+# find / -user jon -print
+　　除了/home/jon目錄以外，還發現如下的內容；
+/usr/local/bin/.httpd
+/tmp/cl
+/tmp/.l/bcast
+/tmp/.l/.l
+/tmp/.l/imapd
+/tmp/.l/log
+/tmp/.l/pscan
+/tmp/.l/pscan.c
+/tmp/.l/rpc
+/tmp/.l/slice2
+/tmp/.l/sniffer
+/tmp/.l/sxploit
+/tmp/.l/thc
+/tmp/.l/ufs.c
+　　這個入侵者已經在系統上安裝了Sniffers、埠掃描器，他給自己營造了一個很好的'家' 。在查看中，還在合法的用戶的目錄下發現了一個可怕的名為'tcp.log'的文件。檔該檔有幾百行長，包括每一次telnet 及 ftp 出入該系統的連接！除了通告在該檔中出現的可能已經被入侵的機器管理員應該重新安裝系統以外，我同樣告訴他們需要更新系統的所有的用戶的口令。
+　　下面有一些例子來幫助你搜索隱藏的危險。首先查看位於用戶目錄的具有'suid'或'guid'的檔。這些檔的可執行屬性位元為s而不是x。如:
+#ls -s /usr/bni/passwd
+-r-s--x--x 1 root root 10704 Apr 14 1999 /usr/bin/passwd
+　　屬性第四位元的 's' 表示該命令被執行時，該進程的實際有效用戶ID就變為root用戶。為了允許普通用戶修改自己的密碼，這是必須的。第七位的x若為s則表示別的組的用戶若運行該程式則該程式則具有用戶所有組的有效組ID。使程式能冒充特定的用戶或者組並不是一件有害的事情。但是一般來說非管理用戶在其目錄下不應該具root-suid 程式。我們可以使用下面的命令來查尋這樣的檔：
+# find /home -perm -4000 -o -perm -2000 -print
+　　下一步我們繼續尋找入侵者留下的程式和檔，所以需要一個快速的尋找隱藏目錄的方法。下面的方法就是尋找如'.kde'的隱藏目錄。你也可以找到如'.. '或“...'等目錄：cracker.
+# find / -type d -name '.*' -print
+　　'-type d'選項指僅僅列出目錄。這個命令不會不會將'.'或'..'列出。
+五、
+　　作為一個好的系統管理者，為了擊敗攻擊者的攻擊行動，最好的方法是瞭解攻擊者的工作原理和機制。它們使用了那些工具，它們如何操作入侵等等。所以深入理解掌握我這裏講解的各種網路工具是很有必要的。
+　　上面用實例的方式說到了了一個攻擊者使用sniffer監聽網路流來搜集用戶名和密碼。下面我們就詳細說明sniffer是如何工作的。簡單的說，sniffer是一個使你能檢測你的網路介面接收到所有的資料報。一般情況下，電腦僅僅接受目的地址是自身的資料報，而sniffer使網路介面進入雜錯模式，從而可以接受網卡收到的所有的資料報。
+　　若你運行ifconfig eth0命令，會得到下面的結果：
+eth0 Link encap:Ethernet HWaddr 00:C0:4F:E3:C1:8F
+inet addr:192.168.22.2 Bcast:192.168.22.255 Mask:255.255.255.0
+UP BROADCAST RUNNING MULTICAST MTU:1500 Metric:1
+RX packets:49448 errors:0 dropped:0 overruns:0 frame:0
+TX packets:33859 errors:0 dropped:0 overruns:0 carrier:0
+collisions:6 txqueuelen:100
+Interrupt:10 Base address:0x300
+
+
+　　打開兩個終端，一個終端裏運行sniffer器-sniffit；
+# sniffit -i
+　　另外一個虛擬終端裏你可以再次運行ifconfig eth0。你將會發現輸出中有下面的內容：
+UP BROADCAST RUNNING PROMISC MULTICAST MTU:1500 Metric:1
+　　注意和上面相比較，增加了一個單詞'PROMISC' 這是雜錯模式(promiscuous mode)的縮寫,
+　　sniffit是一個羽量級的，基於終端的sniffer器。你可以從http://reptile.rug.ac.be/~coder/sniffit/sniffit.html得到它。
+　　另外一個類似的sniffer是netwatch,你可以從http://www.slctech.org/~mackay/netwatch.html得到它。
+　　如果你不希望在系統中安裝另外的sniffer，你可以使用系統中帶有的一個工具：tcpdump 這個工具雖然不如前面兩個工具那麼華麗，但是她可以完成所有同樣的功能。
+# tcpdump host www.linuxjournal.com -l | tee /tmp/tcpdump.out
+　　其中-l指示tcpdump將輸出資料存進入一個檔中。下面是輸出的內容：
+16:41:49.101002 www2.linuxjournal.com.www > marcel.somedomain.com.1432: F
+2303148464:2303148464(0) ack 1998428290 win 16352
+16:41:49.101206 marcel.somedomain.com.1432 > www2.linuxjournal.com.www: . ack
+1 win 32120 (DF)
+16:41:50.001024 www2.linuxjournal.com.www > marcel.somedomain.com.1429: F
+1805282316:1805282316(0) ack 1988937134 win 16352
+16:41:50.001215 marcel.somedomain.com.1429 > www2.linuxjournal.com.www: . ack
+1 win 32120 (DF)
+16:41:50.840998 www2.linuxjournal.com.www > marcel.somedomain.com.1431: F
+1539885010:1539885010(0) ack 1997163524 win 16352
+16:41:50.841198 marcel.somedomain.com.1431 > www2.linuxjournal.com.www: . ack
+1 win 32120 (DF)
+16:41:51.494356 marcel.somedomain.com.1429 > www2.linuxjournal.com.www: P
+1:335(334) ack 1 win 32120 (DF)
+16:41:51.497003 marcel.somedomain.com.1433 > www2.linuxjournal.com.www: S
+2019129753:2019129753(0) win 32120
+(DF)
+16:41:51.671023 www2.linuxjournal.com.www > marcel.somedomain.com.1429:R
+　　Linux系統中可以得到有很多種的sniffer。攻擊者在入侵系統以後，也許會使用修改的ps命令來隱藏其運行的sniffer器。或者將其改為一個看上去很正常的進程的名稱。
+
+
+----------------------------------------------------------------------------------------------------

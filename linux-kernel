@@ -1,0 +1,184 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* Linux Kernel 下的 config
+	
+	對 linux kernel 做 make menuconfig 後, 設定檔案是放在 kernel source 最上層的 .config 之中. 另外, 在 configs 目錄之下有一些預設好的config檔案可以用, 只要複製到 .config 即可.
+
+
+----------------------------------------------------------------------------------------------------
+
+* Kernel 的命令列參數指定
+
+	假設 root 在 /dev/hda6, major=3, minor=6, 則正確寫法為:
+
+	root=306
+
+----------------------------------------------------------------------------------------------------
+
+* Kernel 的命令列參數指定 ip 格式
+
+        kernel parameter 的 ip 格式如下:
+               ip=off or ip=client-ip:server-ip:gateway-ip:netmask:hostname:device:proto
+               Specifies the IP autoconfiguration parameters. ip=off disables autoconfiguration. All the following arguments are optional:
+                                                                                                   
+               client-ip
+               Specifies, in aa.bb.cc.dd style, the numeric IPv4 address of this machine.
+               server-ip
+               Specifies, in aa.bb.cc.dd style, the numeric IPv4 server address for the root filesystem.
+               gateway-ip
+               Specifies, in aa.bb.cc.dd style, the numeric IPv4 address of the first gateway between the client and the server, if any.
+               netmask
+               Specifies, in aa.bb.cc.dd style, the numeric IPv4 netmask for this machine.
+               hostname
+               The hostname, possibly in FQDN format for this machine. If the name is a FQDN, then the system DNS domain name will also be set.
+               device (default eth0)
+               The device to apply this values to.
+               proto (default both)
+               Protocol to use to retrieve missing information above. Possible values are:
+
+----------------------------------------------------------------------------------------------------
+
+* 指定 ramdisk 的方法:
+
+	1. .config 檔案中以下三項要設定 
+		CONFIG_BLK_DEV_RAM=y		要打開此選項才會有 ramdisk 功能.
+		CONFIG_BLK_DEV_RAM_SIZE=4096	預設的 ramdisk 大小, 以 kByte 為單位. 若解壓過的 ramdisk 比此值大, 那麼 kernel command line 要補上 ramdisk_size=NNN 其中的 NNN 即為所需的大小.
+		CONFIG_BLK_DEV_INITRD=y		若此項未設定則 kernel command line 的 initrd=位址,壓縮後的ramdisk大小(單位: BYTE(10進制,若前方加0x才是16進制)) 會失效
+
+	2. root 指向 /dev/ram 或 /dev/ram0
+
+	Q: ramdisk_start=N 可以用來指定 ramdisk 在軟碟在第幾個 block (此時一個 block 為 1024 Bytes). 那麼, 可以利用此參數指定 ramdisk 從 FLASH 的某一位址開始讀取嗎?
+	
+
+----------------------------------------------------------------------------------------------------
+
+* 指定 NFS root 格式
+
+	nfsroot=提供nfs的主機ip:/分享出來的目錄,rw
+
+	注意 rw 所在位置, 要跟在目錄後並以逗號隔開, 而不是在kernel命令列中獨立一個
+
+	其餘請參考 kernel source tree 中 Documentation/nfs-root.txt
+
+	註: 剛掛上的 rootfs 是唯讀的, 在 /etc/rc.d/init.d/rc.sysinit 或 /etc/rc.d/rcS 要有類似以下功能的 script
+
+	# Mount /proc
+	# -n 參數不會用到 /etc/mtab
+	mount -n -t proc none /proc
+
+	# Remount the root filesystem read/write:
+	# 重新將根檔案系統掛載成可讀寫, 改回 ramdisk 時記得下列 /dev/nfs 及 /etc/fstab 都需要修改成適當值 (或許可以改寫成 mount -n -t root -o remount,rw / 醬子一來 mount 就會自己去 /etc/fstab 找 / 從哪兒掛上, 就不用兩邊改了)
+	mount -n -t root -o remount,rw /dev/nfs /
+
+	# Clear mtab
+	>/etc/mtab
+
+	# Remove stale mtab backups:
+	rm -f /etc/mtab~*
+
+	# Update mtab with root and /proc mount points:
+	# 更新 mtab
+	mount -f /proc
+	mount -f /
+
+	註: 若有在 /etc/pcmcia/network.opts 指定插入 cf/pcmcia 界面的網路卡時自動設定ip時要注意不要和 nfs server 同一個網域, 也不要去修改到 gateway (default router), 否則...會發生無法透過讀不到nfs server的檔案系統.
+
+----------------------------------------------------------------------------------------------------
+
+* 製作 tag 的技巧
+
+	1. emacs (etags)
+		在 kernel source tree 最上層執行 make TAGS
+
+	2. vi (ctags)
+		在 kernel source tree 最上層執行 make tags
+
+	以 vi 為例, 執行以上步驟以後, 在 kernel source tree 最上層會產生一個 tags 檔案. 以後到 kernel source tree 下任一目錄後編輯任一檔案只要在vi內執行以下命令即可取用 tags 了:
+
+	set tags=/path_to_top_level_of_kernel_source_tree/tags
+
+	千萬不要以為在 kernel source tree 內各目錄都做一個 symbolic link 到最頂撩搘媬
+
+----------------------------------------------------------------------------------------------------
+
+* 製作 kernel 的修補檔應注意事項
+
+	製作時應該先執行 make mrproper 再用 diff。 單純 make clean 時 scripts 目錄內有些已經編譯好的 script 不會被清除 (make dep 時産生)， 另外 include/XXX、include/XXX/{arch,proc}這幾個 Symbolic Link 也不會被清除。
+
+----------------------------------------------------------------------------------------------------
+
+* 開啟 frame buffer 的參數
+
+	首先當然要在組態 kernel 時勾選 frame bufffer
+
+	再來就是開機的 kernel 命令列加上 vga=0x???? 問號代表數值參考下表：
+
+                                                                                
+Colours 640x400 640x480 800x600 1024x768 1280x1024 1600x1200
+-------+----------------------------------------------------
+ 4 bits|   ?       ?     0x302      ?        ?         ?
+ 8 bits| 0x300   0x301   0x303    0x305    0x307     0x31C
+15 bits|   ?     0x310   0x313    0x316    0x319     0x31D
+16 bits|   ?     0x311   0x314    0x317    0x31A     0x31E
+24 bits|   ?     0x312   0x315    0x318    0x31B     0x31F
+32 bits|   ?       ?       ?        ?        ?         ?
+
+	順便一提， 若將模式開到最適合該lcd的模式時zhcon的中文字雖然只有16點，但是已經和倚天中文一樣漂亮了。
+----------------------------------------------------------------------------------------------------
+
+* MIPS 系統的 Data Bus error
+
+	這個 exception 似乎只在 MIPS 系統上出現，有時是因為要存取的位址不存在而發生的。
+	改用 get_dbe (asm/paccess.h) 存取的話，若有發生 Data Bus error，則 traps.c 的 do_be() 會呼叫 get_dbe() 填的 fixup 程式。
+	如此一來程式流程就能安全的回到 get_dbe 的下一行， 而且可以從 get_dbe 傳回值是否為 -EFAULT 判斷讀取是否失敗。
+	這一部份程式大略如下所示：
+
+		#define get_dbe(x,ptr) __get_dbe((x),(ptr),sizeof(*(ptr)))
+
+		struct __large_pstruct { unsigned long buf[100]; };
+		#define __mp(x) (*(struct __large_pstruct *)(x))
+
+		#define __get_dbe(x,ptr,size) ({ \
+		int __gu_err; \
+		__typeof(*(ptr)) __gu_val; \
+		unsigned long __gu_addr; \
+		__asm__("":"=r" (__gu_val)); \
+		__gu_addr = (unsigned long) (ptr); \
+		__asm__("":"=r" (__gu_err)); \
+		switch (size) { \
+		case 1: __get_dbe_asm("lb"); break; \
+		case 2: __get_dbe_asm("lh"); break; \
+		case 4: __get_dbe_asm("lw"); break; \
+		case 8: __get_dbe_asm("ld"); break; \
+		default: __get_dbe_unknown(); break; \
+		} x = (__typeof__(*(ptr))) __gu_val; __gu_err; })
+
+		#define __get_dbe_asm(insn) \
+		({ \
+		__asm__ __volatile__( \
+		".set\tpush\n\t" \
+		".set\tnoreorder\n\t" \
+		insn "\t%1,%2\n\t" \							將位址 __gu_addr 的資料，依據傳入 insn 不同，載入不同寬度的資料到 __gu_val
+		"1:\tmove\t%0,$0\n" \							將 __gu_err 歸零($0)
+		".set\tpop\n\t" \
+		"2:\n\t" \
+
+		".section\t.fixup,\"ax\"\n" \
+		"3:\tli\t%0,%3\n\t" \							將 __gu_err 設成 -EFAULT
+		"move\t%1,$0\n\t" \								將 __gu_val 歸零
+		"j\t2b\n\t" \									向上跳到 2: 那一行。由於該行以下程式碼全部都是不同 section，所以到__get_dbe_asm 下一行
+		".previous\n\t" \								將 section 改回上一個。 假設原本使用 .text，就會回到 .text
+
+		".section\t__dbe_table,\"a\"\n\t" \
+		".word\t1b-4,3b\n\t" \							在 __dbe_table 建立一個 fixup 表。若 insn %1,%2 (1b-4) 出現DBE，則由do_be()->search_dbe_table()傳回3: li %0,%3的位址。
+		".previous" \									將 section 改回上一個。 假設原本使用 .text，就會回到 .text
+		:"=r" (__gu_err), "=r" (__gu_val) \				__gu_err為%0, __gu_val為%1
+		:"o" (__mp(__gu_addr)), "i" (-EFAULT)); })		__gu_addr為%2, -EFAULT為%3
+
+
+	註： get_dbe() 會依據第二個參數是哪種指標，決定讀取的資料寬度。
+
+	註： 可以把 get_dbe() 想成可用傳回值檢查是否有 data bus error 的 read[bwl]()。 (同時也可防止 kernel 因此關閉程式或重開機器)
+
+----------------------------------------------------------------------------------------------------

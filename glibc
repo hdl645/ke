@@ -1,0 +1,28 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 做協志的案子時無法使用 shared library
+
+	因為 handheld.org 的 toolchain 編譯時將 lib 定在 /usr/local/arm/3.3.1/lib, 而我將 library 複製到 /lib. 所以:
+
+	方法一: (參考 http://lists.arm.linux.org.uk/pipermail/linux-arm/2002-April/003537.html)
+
+		mkdir -p /usr/local/arm
+		ln -s / /usr/local/arm/3.3.1
+
+		也就是在 /usr/local/arm 造個名為 3.3.1 連結, 讓載入程式可以透過這個連結找到位於 /lib 的 library.
+
+	方法二: 修改 ld-2.3.2.so
+		                                                                                           
+		尋找 /usr/local/arm 將 /usr/local/arm/3.3.1/lib 改成 /lib 後面未改到的字用
+		ascii 0 蓋掉即可
+
+	Q: 不知道設定 LD_LIBRARY_PATH 是否也能達到相同效果呢？
+	A: 可以, 因此有了方法三 
+
+		在 /etc/rc.d/rcS 或 /etc/rc.d/rc.sysinit (看 /etc/inittab 的 sysinit 會執行誰) 加上 export LD_LIBRARY_PATH=/lib
+	
+		不過, 這個方法應該只限於 init 本身是靜態連結才有用. 畢竟它要先借助 init 去執行 /etc/rc.d/rcS 後才會生效.
+
+
+----------------------------------------------------------------------------------------------------

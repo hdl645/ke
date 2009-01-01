@@ -1,0 +1,36 @@
+vim:enc=utf8:ts=4:tw=0
+----------------------------------------------------------------------------------------------------
+
+* 用 Adobe Acrobat 6.0 Professional 將 PDF 文件轉成 HTML 4.01 + CSS 1.0 後在 MOZILLA 下觀看出現版面跑掉的解決方案。
+
+	1. <LI> 標籤產生出來的圓點和字疊在一起
+		原本的CSS如下：
+		LI {
+		 list-style-type:disc;
+		 text-align:justify;
+		 margin-bottom:0px;
+		 margin-top:0px;
+		 margin-right:0px;
+		 margin-left:4px;
+		 text-indent:-21px;
+		 direction:ltr;
+		 line-height:17px
+
+		 將 text-indent:-21px 改成 0px
+
+	2. 目錄部份會嚴重向右方偏移（看起來就像很多層巢狀迴圈縮排時的樣子）
+		因為 Adobe 產生出來的 HTML 4.0 + CSS 1.0 的文件會用到大量的 <DIV Class="TOC">標籤，但是卻沒有加上對應的</DIV>，所以 Mozilla 在 RENDER 時就排出巢狀迴圈了。
+		
+		解決方法：把所有的<DIV Class="TOC">刪除，或者加上對應的</DIV>即可。
+
+	3. 再來是圖片的問題，Acrobat似乎會將有圖把字框起來部份整個當做圖來處理。但是產生出圖檔後又用IMG標籤的width及height將高度、寬度縮小。以若刪除width及height圖片又顯的太大了。建議轉檔時選擇Settings/Down sample，建議至少縮到72DPI（螢幕的DPI）。並將IMG標籤所有width、height全部刪除。
+
+		:%s,IMG width=[0-9][0-9]* height=[0-9][0-9]*,IMG,g
+
+		及
+
+		:%s,IMG ID="\([^"]*\)" width=[0-9][0-9]* height=[0-9][0-9]*,IMG ID="\1",g
+		
+
+----------------------------------------------------------------------------------------------------
+

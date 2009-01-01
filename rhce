@@ -1,0 +1,95 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+原著: Emmett Dulaney Sep. 2001
+譯者: 陳國維 Mar. 2002
+
+上個月，我介紹了關於RHCE 認證考試的流程及項目。在這些必需的考試項目其中有一個項目是選擇題。這個考試項目為 40~50 題基本的 Linux 問題(就像正常的考試)，及其他 Red Hat 系統特殊的功能。考試的時間為一個小時。
+
+上個月的附註中提到目前 "全球各地" 約有 20 個城市提供認證考試，是錯誤的。RHCE 認證經理 Randolph Russell 指出目前在美國及加拿大地區經常性舉行認證考試的城市就有 21 個。另外在歐洲、日本、澳洲及太平洋邊緣(遠東地區)也都有提供考試城市。
+
+在這個月中，我將要介紹 RHCE 認證考試中 31 個不可不知的重點。為何麼是 31 呢?因為這 31 個重點是由 Red Hat 強調的重點(http://www.redhat.com/training/rhce/examprep.html)中截錄出來的。
+
+以下列出的各項學習重點包含相關的連結，連結到各個重點的詳細文件資料，應該能夠讓你快速的上手，而且讓你加強認證的實力。
+
+記住，雖然 RHCE 認證是困難的，可是選擇題這部份並不如想像中的困難，但是它也是考試的一部份。
+
+(1)徹底的了解 Linux 的磁碟分割區是非常重要的。在 Red Hat Linux Reference Guide 中 Appendix B 裏提到的重點必須要知道。
+相關資料: http://www.redhat.com/support/manuals/RHL-7.1-Manual/ref-guide/ch-partitions.html
+
+(2)知道如何將 Linux 安到不同的環境(平台)。Intel 平台的安裝手冊在 http://www.redhat.com/support/manuals/RHL-7.1-Manual/install-guide/，而Alpha 平台的安裝手冊在 http://www.redhat.com/support/manuals/RHL-7.1-Manual/alpha-install-guide/
+
+(3)Linux 家族常用的啟動管理程式 LILO，它是大部份 Linux 系統建議使用的程式。LILO 的相關文件在http://linux.davecentral.com/cgi-bin/homepage.pl?4232
+
+(4)認證系統在 Linux 中是廣泛的重點。必須有基本的了解，像 /etc/passwd 裏頭就是放使用者的資料和密碼，其他像 shadow , PAM (Pluggable Authentication Modules) 的實作 , 其他相關的部份，包含停止不使用的服務及使用者帳號等。
+
+(5)在檔案系統部份，Red Hat 與及其他 Linux 系統是有共通性的，只有少數幾個不一樣的檔案。詳細資料在http://www.redhat.com/support/manuals/RHL-7.1-Manual/ref-guide/s1-filesystem-special-file.html
+
+(6)多重開機安裝可以透過一些工具，像 rawrtie ( for DOS ) 跟 fips 來完成。
+相關資料: http://www.linuxgazette.com/issue18/redhat.html#fips
+另外對於如何設定一個多重開機的系統，相關資料在 http://www.redhat.com/support/manuals/RHL-7.1-Manual/customization-guide/dualboot.html
+
+(7)在 /etc/sysconfig 這個目錄下放了許多與系統設定相關的檔案，至於這些檔案的詳細相關資料，可以在http://www.redhat.com/support/docs/howto/sysconfig.html 找到。
+
+(8)KickStart 可以使用在自動安裝，可以省略許多基本的操作過程及設定。一個非常棒的 HOWTO 文件可以在http://wwwcache.ja.net/dev/kickstart/KickStart-HOWTO-monolithic.html 找到。至於與 Red Hat 相關的設定可以在 http://www.redhat.com/support/manuals/RHL-7.1-Manual/customization-guide/ch-kickstart2.html找到資料。
+
+(9)Red Hat Package Manager (RPM) 是一個業界安裝程式及補修檔的標準。如何建立新的 RPMs 檔文件，資料在http://www.redhat.com/support/docs/tips/Compile-Tips/Compile-Tips.html。關於套件管理各方面的文件在http://www.rpm.org。如果你要推鑑你朋友使用 RPM 的話，看看這份資料http://www.redhat.com/support/manuals/RHL-7.1-Manual/customization-guide/s1-rpm-impressing.html。
+
+(10)如果 RPM 套件有 src 這檔的字眼時，表示是一個 source RPM 套件。在 Red Hat 系統中，安裝的的 src.rpm 套件會放在 /usr/src/redhat 這個目錄底下。更多的相關資料在 http://www.redhat.com/support/docs/faqs/rhl_general_faq/s1-more-rpm.html
+
+(11)/sbin 這個目錄下存邊著啟動系統跟開始系統恢復到可操作所需要的執行檔。一份關於Red Hat系統開程程序的資料在http://www.discussionsite.com/computer/linux/linux/00000004.htm。救援模式的文件在http://www.redhat.com/support/manuals/RHL-7.1-Manual/customization-guide/rescuemode.html
+
+(12)要增加使用者或是群組可使用多種方法。針對認證考試，必須看的文件在 http://www.redhat.com/support/manuals/RHL-7.1-Manual/ref-guide/ch-users-groups.html，而且也必知道 Linuxconf 的使用方法，相關資料在 http://www.redhat.com/support/manuals/RHL-7.1-Manual/customization-guide/linuxconf.html
+
+(13)在每個使用者不同的 Shell下，可以透過一個設定檔重新定義使用者的操作環境。一個傳統的例子，當使用者登入時，/etc/profile 會被執行，去設定使用者的環境。如果這個使用者是使用 bash shell 的話，使用者家目錄 (Home directory)下的 .profile 也會被執行。
+
+(14)bash shell 是大部份系統建議使用的 shell。設定 GNU Bourne-Again Shell 的文件資料可以在http://nodevice.com/sections/ManIndex/man0076.html 找到。Bash 環境變數設定的資料可以在http://www.redhat.com/support/manuals/RHL-7.1-Manual/getting-started-guide/s1-managing-variables.html 找到。
+
+(15)配額功能( Quota ) 能夠允許對使用者或是群組設定磁碟空間的使用限制，相關的文件可以在http://www.linuxdoc.org/HOWTO/mini/Quota.html 找到。
+
+(16)root 或是使用者要讓工作(job) 自動執行而不需要手動操作，可以透過 cron 這個服務來達成。Cron 的相關資料在http://www.redhat.com/support/docs/tips.cron/cron.html
+
+(17)對於認證考試而言，核心 (kernel) 的基本概念、它的目的、版本及其他有關的觀念，都必須徹底的了解。關於這方面的資料，Linux Kernel book 裏有份非常棒的資料可以參考 http://nodevice.com/sections/Docs/tlk-0.8-3.html/tlk.html
+
+(1icon_cool.gif完全的了解核心(kernel) 開發工具，由基本的核心到開發(建立)相關的資料在 http://nodevice.com/sections/Docs/lkmpg-1.1.0.html/mpg.html
+
+(19)LILO 的設定(請參考第3點) 是以 lilo.conf 為主要的設定檔，man page 文件可以在http://linuxsavvy.com/resources/linux/man/man8/lilo.8.html 找到。
+
+(20)在 Linux上 經常用到的服務包含:
+Apache 相關文件 http://www.apache.org/docs/misc/FAQ.html
+Samba 相關文件 http://us1.samba.org/samba/docs/FAQ/ 及http://www.redhat.com/support/docs/tips/Samba-Tips/Samba-Tips.html
+NFS 相關文件 http://nfs.sourceforge.net/nfs-howto/ 及http://www.redhat.com/support/docs/tips/NFS-Tips/NFS-Tips.html
+sendmail 相關文件 http://www.sendmail.org/faq及http://www.redhat.com/support/docs/mail.html
+DNS 相關文件 http://www.redhat.com/support/docs/tips/dns/bind.html
+FTP 相關文件 http://www.redhat.com/support/docs/tips/FTP-Setup-Tips/FTP-Setup-Tips.html
+
+(21)了解各項網路服務(請參考第20點)的困難排除。大部份的困難排除經由了解設定檔及懂得如何控制(設定)，都能簡單的排除。大部份的相關資料可以在 http://www.redhat.com/support/manuals/RHL-7.1-Manual/customization-guide/p2165.html 找到。
+
+(22)控制各項服務的存取可以確保不被闖入(入侵)及確定你的系統沒有被濫用。Red Hat 有份資料教你如何達到以上的要求http://www.redhat.com/support/manuals/RHL-7.1-Manual/customization-guide/access-services.html
+
+(23)其他可以在 Red Hat 上完全支援且執行的網路服務:
+Squid 相關文件: http://www.squid-cache.org/Doc/FAQ/FAQ.html
+innd NNTP server 相關文件: http://www.mibsoftware.com/userkt/inn/doc/innd.8.htm 及 http://www.redhat.com/support/docs/tips/INN-Tips/INN-Tips.html
+xntpd 相關文件: http://www.eecis.udel.edu/~ntp/database/html_xntp3-5.90/xntpd.html
+
+(24)了解 X 及 XFree86
+設定 X 的相關資料可以在 http://www.redhat.com/support/manuals/RHL-7.1-Manual/getting-started-guide/s1-q-and-a-xconfig.html 及 http://www.europe.redhat.com/documentation/HOWTO/Xwindow-User-HOWTO.php3 找到。
+
+(25)桌面環境 (Desktop environment) 的使用及設定相關資料可以在 http://www.redhat.com/support/manuals/RHL-7.1-Manual/getting-started-guide/ 中的 Gnome 及 KDE 段落中找到。
+
+(26)遠端登入及遠端用戶顯示在 X 的環境下是可能的，要對二者做設定最簡單的方式資料可以在http://www.lehigh.edu/~ludoc/seminar/xwin-day1/section3.7.html找到。
+
+(27)xinetd 是比 inetd 各為安全的工具，相關文件在 http://www.synack.net/xinetd/；tcp_wapper 提供一個簡單的防火牆 (firewall) 及管制進入網路機制的工具，相關文件在 http://www-oss.fnal.gov/fss/documentation/linux/linux-faq/0006.html
+
+(28)NIS 允許你在簡單的網路環境中實行。Red Hat 系統可以設定成一部 NIS 用戶端(client)或是 NIS+ 用戶端，也可以設定成 NIS 主機(server)，相關設定步驟資料在 http://www.europe.redhat.com/documentation/HOWTO/NIS-HOWTO/index.php3
+
+(29)了解 PAM (Pluggable Access Modules) 的使用方法，增進系統的安全性。詳細的資料在http://www.europe.redhat.com/documentation/HOWTO/User-Authentication-HOWTO/index.php3
+
+(30)路由(Routing) (在 iproute2 中的術語) 的資料在 http://www.europe.redhat.com/documentation/HOWTO/Adv-Routing-HOWTO.php3；IP forwarding 相關資料在 http://kernelnewbies.org/documents/ipnetowrking/linuxipnetworking.html#tth_chAp7
+
+(31)了解如何使用 ipchains ，並實作出一個基本的防火牆(firewall)，Linux ipchains 相關的資料在http://www.europe.redhat.com/documentation/HOWTO/IPCHAINS-HOWTO.php3；而在 Rad Hat 中如何定出使用者自已的規則(role)相關資料的概念在 http://www.linux.cu/docs/RedHat6.2/doc/ref-guide/s1-sysadmin-usr-grps.html#S2-SYSADMIN-PRIV-GROUPS
+
+以上共 31 個關於Red Hat RHCE 認證考您不可不知的重點，沒有任何的事能夠比你自已實際動手去做一次更好，以上提供的連結主要應用在針對RHCE 認證考試選擇題部份，建立觀念、增加知識、加強實力。
+
+
+----------------------------------------------------------------------------------------------------

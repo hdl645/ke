@@ -1,0 +1,130 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 查詢其它輸入法對某字的拆法
+
+	輸入該字後按 Ctrl + Alt + I 切換
+
+	或
+
+	修改 ~/.xcinrc (假設要查詢倉頡字根)
+
+(define zh_TW.Big5
+'((DEFAULT_IM "scj")
+(DEFAULT_IM_MODULE "gen_inp")
+(DEFAULT_IM_SINMD "DEFAULT")
+(PHRASE "default.phr")
+(CINPUT (cj chewing scj simplex phone bimspinyin bimsphone jyutping0 array30 bimsphonesimple zh_hex))
+
+	將 (DEFAULT_IM_SINMD "DEFAULT") 改成 (DEFAULT_IM_SINMD "cj") , 儲存後重新啟動 xcin 即可
+----------------------------------------------------------------------------------------------------
+
+* 由xdm/gdm/kdm登入後自動載入xcin
+
+首先弟要跟各位說聲對不起，原來之前弟說的 xdm/gdm/kdm 不能讀取 ~/.xsession 和 ~/.Xresource 都是錯的，在此致上無限的歉意
+
+關於以前常常有人問到，使用 kdm 登入 X 的話，要如何讓系統在我們進入 X 以後自動載入 xcin 的問題，弟已經知道怎麼做了。您可以直接將 export LC_ALL=zh_TW.Big5 和 exec xcin& 等指令放在 ~/.xsession 裡面。您也可以將讓系統在您進入 X 的時候，讀取 ~/.Xresources 裡面的資料 (例如 Emacs 的 X resource 設定可以放在這個檔案裡)。當您在 kdm 的登入畫面的時候，選擇 "default" session，系統就會讀取您的 ~/.xsession 了。底下為一 ~/.xsession 的簡單範例：
+代碼:
+
+#!/bin/sh
+#
+# ~/.xsession
+#
+
+# export 環境變數
+export LANG=zh_TW.Big5
+export LC_ALL=zh_TW.Big5
+export XMODIFIERS=@im=xcin
+
+# 載入 xcin
+exec xcin&
+
+# 讀進 ~/.Xresources 裡面的資料
+if [ -f ~/.Xresources ]; then
+  xrdb -merge ~/.Xresources
+fi
+
+# 啟動 KDE
+exec startkde
+
+這個方法應該也適用於 xdm 和 gdm，不過弟沒有親自試過，所以不是很確定。
+
+我使用gdm,.xsession設定可以生效,不過只有在我使用icewm或是icewm-gnome的時候才行,如果我使用gnome Helix則無效,不過因為我一直都使用icewm-gnome所以這對我並不會有影響.
+
+我的學弟曾經跟我提過好像要修改自家目錄下的.Xclients 或是.xinitrc
+加入環境變數以及xcin ,因為我自己沒在用所以沒有證實過,也許可以試試看(我記得moto大的無痛起步當中也有提到)
+
+另外有個小tip分享一下,啟動xcin的部份我喜歡用exec xcinterm-big5&
+直接呼叫crxvt出來,這樣子上BBS會方便一些.. 
+
+----------------------------------------------------------------------------------------------------
+
+* 倉頡 4.1 後輸入標點符號方法
+
+　        、 　　【重難日金】 【ZXAC】
+
+　　　　　。 　　【重難日木】 【ZXAD】
+
+　　　　　「 　　【重難金木】 【ZXCD】
+
+　　　　　」　　 【重難金水】 【ZXCE】
+
+　　　　　﹁ 　　【重難金火】 【ZXCF】
+
+　　　　　﹂ 　　【重難金土】 【ZXCG】
+
+　　　　　『 　　【重難金竹】 【ZXCH】
+
+　　　　　』 　　【重難金戈】 【ZXCI】
+
+　　　　　﹃ 　　【重難金十】 【ZXCJ】
+
+　　　　　﹄ 　　【重難金大】 【ZXCK】
+
+----------------------------------------------------------------------------------------------------
+
+* 將環境變更為 UTF-8
+
+	1. 更改 /etc/sysconfig/i18n
+		LANG=zh_TW.UTF-8
+		LC_CTYPE=zh_TW.UTF_8
+		XMODIFIER="@im=xcin-zh_TW"
+
+	2. 檢查一下 /etc/bashrc 或 ~/.bashrc 或 /etc/profile 是否有更動到 LANG, 若有請註解掉. 
+
+	3. 關閉 x window 後再重新登入即可.
+
+	註: 將檔案編碼轉換成 UTF-8 的方法
+
+		iconv -f big5 -t utf-8 filename
+
+		建議以 -f 參數指定原先是什麼編碼.
+
+	註: 中文檔名也要用 iconv 改過, 不然原來是big5編碼
+
+	註: .vimrc 要加上如下三列, 否則存檔轉換編碼時似乎會發生錯誤.
+
+		set fileencoding=utf-8
+		set fileencodings=utf-8
+		set tenc=utf-8
+
+	註: 若遇上連別人的ftp為亂碼時(因為別人為big5), 使用 gnome-terminal 可以選擇 "終端機" "文字編碼" "big5" 即可. (若沒有可以新增)
+
+	註: 若不想轉換原來的文件編碼, 只要進vim後執行 :set enc=big5 即可正常瀏覽. 因此, 只要在這些檔案的最前五列或最後五列加上 vim:enc=big5 即可.
+
+	註：今天又遇到新的問題，當 LANG=zh_TW.UTF-8 時，執行 tripwire -m u -r XXXXXX.twr 出現的報告中有些中文字是UTF-8編碼，導致tripwire 無法繼續分析該報告。目前是以  LANG=en_US tripwire -m u -r XXXXXX.twr 方式暫代。
+
+	註: putty 只要在 Translation 中指定收到的資料假設為 UTF-8 即可正常顯示.
+
+	註: 關於 ftp 的問題, 可以將 LANG, LC_CTYPE export 成 zh_TW.Big5, 並利用 Gnome-Terminal 可以顯示 Big5 編碼的能力即可看,建立big5編碼的中文檔案/目錄 (LANGVAR 可能也要設定)
+
+----------------------------------------------------------------------------------------------------
+
+* 輸入標點符號
+
+	Alt + Shift + , ==> ，
+	Alt + Shift + . ==> 。
+
+	依此類推
+
+----------------------------------------------------------------------------------------------------

@@ -1,0 +1,102 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+前言﹕
+
+不知道大家對 twripwire 這個軟體有了解嗎﹖
+簡單而言﹐它可以通過比對檔案簽名資料找出系統上有哪些檔案遭到修改了。
+當您懷疑系統被入侵而遭到篡改的時候﹐這份比對資料就非常有用了﹗
+
+下面的方法﹐是簡單的讓您在系統上將 tripwire 功能設定起來。
+
+
+-------------
+測試環境﹕
+
+RedHat 7.1
+
+
+-------------
+設定步驟﹕
+
+1) 取得 tripwire 的安裝套件(rh7.1 第二片光碟)﹐並進行安裝﹕
+rpm -ivh /mnt/cdrom/RedHat/RPMS/tripwire-2.3.0-58.i386.rpm
+
+2) 進行初始化設定
+/etc/tripwire/twinstall.sh
+輸入多次密碼 ( site & local)
+/usr/sbin/tripwire --init
+
+3) 進行一些針對性修改
+cd /etc/tripwire
+/usr/sbin/tripwire -m c | grep Filename > twnotfound.txt
+寫一個這樣的 script (我命名為 twfilter.sh)﹕
+#!/bin/bash
+orig_file=/etc/tripwire/twpol.txt
+not_file=twnotfound.txt
+tmp_file=tmp.txt
+new_file=new.txt
+cat $orig_file > $tmp_file
+for i in $(cat $not_file | cut -d ":" -f 2); do
+grep -v $i $tmp_file > $new_file
+cat $new_file > $tmp_file
+done
+mv $orig_file $orig_file.bak
+cat $new_file > $orig_file
+rm -f $new_file
+rm -f $tmp_file
+#-- end of script --#
+
+並執行該 script:
+sh twfilter.sh
+
+4) 重新建立資料庫﹕
+/usr/sbin/twadmin -m P /etc/tripwire/twpol.txt
+/usr/sbin/tripwire -m i
+
+-------------
+使用 tripwire﹕
+
+1) 需要的時候﹐執行如下命令檢查﹕
+/usr/sbin/tripwire --check
+
+2) 並定期檢查 root 的信箱﹐以確定 tripwire 資訊被正確的關注。
+(tips: 您可以修改 aliases 或 cron script﹐將信件送到特定的信箱去)
+
+3) 如果您對檔案進行過更新﹐您可以從上兩個步驟中獲得資訊。
+假如您確定報告所列的修改是必須且安全的﹐而不希望再次收到其報告﹐
+那您可以以先在 /var/lib/tripwire/report/ 目錄內﹐找到關於本機的最新報告﹐
+例如﹕
+/var/lib/tripwire/report/your.machine.name-20020326-040526.twr
+執行如下命令來編輯這個檔(預設是 vi 模式)﹕
+/usr/sbin/tripwire -m u -r \
+/var/lib/tripwire/report/your.machine.name-20020326-040526.twr
+退出 vi 模式並輸入密碼就能更新資料庫了。
+假如您有某些物件不希望被更新﹐那您可以移到如下位置開始往後檢查每一個記錄﹕
+================
+Object Summary:
+================
+找到所有您認為不需要更新的記錄前面的 [x] ﹐然後將 x 刪除。
+
+
+-------------
+注意之處﹕
+
+1) 請確定您有定期檢查 tripwire 報告的習慣﹐否則形同虛設。
+
+2) 影響比對結果的至為關鍵的資料是 tripwire 的資料庫﹐
+您可以在 /var/lib/tripwire 目錄內找到﹐如﹕
+/var/lib/tripwire/your.machine.name.twd
+有可能的話﹐請將之保存在‘唯讀’性質的媒體上﹐例如燒成 CD 或有防寫的軟碟上面﹐
+在執行 --check 的時候用 -d 來指定路徑就可以了。
+
+
+-------------
+後記﹕
+
+日後的具體更新和應用﹐則是讀者您需要自己摸索的。
+更多資料請參考﹕
+http://www.tripwire.org/ 
+
+
+----------------------------------------------------------------------------------------------------

@@ -1,0 +1,53 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 出現 No Display subsection in screen section "Screen0" for depth/fpbpp 8/8 訊息
+
+	執行 X :1 -depth 8 -ac & 螢幕閃一下後就消失了.
+
+	解:
+		檢查 /var/log/XFree86. 出現下列訊息:
+		(EE) NV(0): No Display in screen section "Screen0" for depth/fpbpp 8/8 
+		(EE) Screen(s) found, but none have a usable configuration.
+
+		若符合上列條件, 請修改 /etc/X11/XF86Config-4 或 /etc/X11/XF86Config, 在 Screen Section 內加上一組 SubSection:
+
+		SubSection "Display"
+			Depth 8
+			Modes "1024x768" "800x600" "640x480"
+		EndSubSection
+
+		範例:
+Section "Screen"
+    Identifier   "Screen0"
+        Device       "RIVA TNT2"
+        Monitor      "Monitor0"
+    DefaultDepth    24  
+
+    Subsection "Display"
+            Depth       24 
+                Modes       "1024x768" 
+    EndSubsection
+EndSection
+
+		改成:
+Section "Screen"
+    Identifier   "Screen0"
+        Device       "RIVA TNT2"
+        Monitor      "Monitor0"
+    DefaultDepth    24  
+
+    Subsection "Display"
+            Depth       24 
+                Modes       "1024x768" 
+    EndSubsection
+
+    Subsection "Display"
+            Depth       8  
+                Modes       "1024x768" 
+    EndSubsection
+
+EndSection
+
+
+----------------------------------------------------------------------------------------------------

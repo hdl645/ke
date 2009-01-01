@@ -1,0 +1,146 @@
+vim:tw=1024:ts=4:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 建立專案
+
+	cd 該專案最上層目錄
+	cvs import 專案名稱 團隊名稱 r_0_0_1
+
+----------------------------------------------------------------------------------------------------
+
+* 取出 cvs repository 內的專案
+	
+	cvs checkout 專案名稱
+	
+	或
+
+	cvs co 專案名稱
+
+----------------------------------------------------------------------------------------------------
+
+* 更新專案
+
+	cd 專案目錄(只要有CVS目錄的均可, 但就只更新該目錄及以下子目錄)
+	cvs update
+
+	參數：
+		-A	移除先前工作版本所有STICK記號。
+		-d 建立新目錄，建議使用。假設有一狀況如下：專案A已經checkout出來了，若另外有人在專案A內加了目錄。若在先前專案A的工作版本所在目錄執行update時未加上此參數，則新增的目錄不會被checkout出來。
+
+----------------------------------------------------------------------------------------------------
+
+* 上傳專案變更部份
+
+	cvs commit
+
+	或
+
+	cvs ci
+
+	或
+
+	cvs -m "註解" commit
+
+----------------------------------------------------------------------------------------------------
+
+* 自動在專案變更時通知團隊所有成員
+
+	以 nnARM 為例:
+
+	^nnARM_comment echo "nnARM_comment %{sVv} had been updated" | mail -s "nnARM_comment" hdl,alex,alexander
+
+	^nnARM_comment 表示 nnARM_comment 開頭的專案, 若符合本條件, 則執行後方命令. 此判斷是以 regular express 表達, 亦可另外撰寫 script 檢查 (未測試過). 
+
+	echo "nnARM_comment %{sVv} had been updated" | mail -s "nnARM_comment" hdl,alex,alexander 這一段是寄信給 hdl, alex, alexander; 信件標題是 nnARM_comment; 信件內容則是 nnARM_comment "檔案,舊版本編號,新版本編號" had been updated.
+
+----------------------------------------------------------------------------------------------------
+
+* cvs 陷阱
+
+	在我編譯 linux-2.4.19-rmk6-pxa1-hh12 時, 一直都編譯失敗,
+花了好久好久時間 debug 才發現一個問題. cvs 在 import 專案時,
+似乎會濾掉特定關鍵字, 比如說 cores. 在我 make 該 kernel 時 net 目錄下的 cores
+目錄就這樣子被濾掉了, 導致後來編譯 kernel 到最後的 link 階段都會一直有error
+出現. 就是因為 cores 目錄沒有被收錄到 CVS Repository 內引起.
+目前尚不知道有什麼方法可以強制 cvs import 所有檔案. 
+
+	我暫時是先 import, 然後 checkout 到別的地方, 再把原目錄整個複製到 checkout 出來的目錄, 再到該目錄執行 find . ! -name "CVS" -exec cvs add {} \;
+
+	今天在[永遠的unix]內看到別的新增專案的方法想到可以加入所有檔案的方法了, 步驟如下:
+		1. 在 CVS Repository 中建立專案要用名稱的目錄, 如:
+			make /home/cvsroot/t_linux
+		2. 把該專案 checkout 到某目錄
+			cd /tmp
+			cvs checkout t_linux
+		3. 把要加入該專案的檔案及目錄挪到剛剛 checkout 出來的目錄
+			mv ~hdl/project/armlinux/pxa250/* /tmp/t_linux
+		4. 用 find 命令把所有檔案及目錄加入專案, 用 find 命令的優點是句點開頭的隱藏檔也會被加入專案. 以下命令中 ! -name
+		"CVS" 也可以不加, 反正只會出現一次警告:
+			cd /tmp/t_linux
+			sync
+			
+			find . ! -name "CVS" -exec cvs add {} \; 2>&1 | tee -a cvs-add.log
+			或
+			find . -type d -a ! -name "CVS" -exec cvs add {} \;
+			find . | grep -v "/CVS/" | xargs cvs add
+			
+		5. 再把剛剛新增的檔案 commit 出去, 最好在 commit 之前先打個
+		tag 較好:
+			cvs commit -m "" (未 commit 新增的檔案前不能打 tag)
+			cvs tag start (打個 tag 名為 start)
+			cvs commit (Q: 打tag後還要再commit嗎?)
+
+	註: 此一方法似乎仍有問題, 用到 linux-2.4.19-rmk6-pxa1-hh12 時 make
+	menuconfig 會出現跑 awk 時出現記憶體區段錯誤而停止. 經檢查 CVS
+	Repository 後發現出問題的目錄及檔案的確有進去, 但是就是沒有 checkout
+	出來
+
+
+----------------------------------------------------------------------------------------------------
+
+* CVS伺服器換IP後無法更新在舊IP時CHECKOUT的專案
+
+	將CVS/Root內的domain name或IP改成新的即可. 不過每個子目錄都有一個Root檔案，可能要搭配sed來修改比較快. 或者直接重新CHECKOUT一次。
+
+----------------------------------------------------------------------------------------------------
+
+* GUI cvs
+
+	wincvs
+
+	Cervisia
+
+----------------------------------------------------------------------------------------------------
+
+* WinCVS 找不到 Python 的問題
+
+	困擾我已久，WinCVS找不到Python的問題總算解決了。因為較早期的WinCVS在製作時Python 2.3版算是實驗中版本，因此當時的WinCVS只會尋找2.1或2.2版，不會去找2.3版。所以必須安裝如：ActiveState Python 2.2.3之類的版本。到現在我用的1.3.?.2 Beta ?版則已經支援2.3版的Python。
+
+	至於使用Python做Shell有什麼好處呢？至少，主選單的Macros選單可以用了，裡面製作ChangeLog、遞迴式增加檔案（自動Commit）以及列出所有TAG等功能都打開了。
+
+----------------------------------------------------------------------------------------------------
+
+* 命令 cvs 自動在 commit 時將變更部份寄給某些人
+
+
+	原本在 sourceforge.net 下載 syncmail, 在要通知使用的 CVS Repository 的 CVSROOT 的 loginfo 內寫上
+
+	DEFAULT /usr/bin/syncmail %{sVv} hdl,root
+
+	commit 出去後, 發現寄信時會出問題, 似乎是 smtplib.py 有點問題. 改用 sourceforge.net 上的 syncmail (PERL版) 以上述方法安裝, commit 後就可以了. 不過, 習慣看 -u 參數(同diff), 因此在 /usr/bin/syncmail.pl 後方再加上 -u
+
+	註: 晶慧用的似乎是一個叫 log_accum.pl 的程式
+
+----------------------------------------------------------------------------------------------------
+* Putting kernel sources in CVS
+
+  cd linux
+  cvs import -ko -I '!' -m "import linux-2.4.7" mylinux linus linus_2_4_7
+
+
+	Problems with existing CVS tags.
+
+	Some kernel developers use CVS privately, and the diffs they send Linus for inclusion contain tags such as $id: $ If you add a file without using the -ko option, CVS will perform substitution on that file, which makes for noisy diffs against vanilla trees. If you forgot to use -ko, all is not lost. You can 'fix' the repository by using cvs admin -ko But get into the habit of importing/adding files with -ko 
+
+
+----------------------------------------------------------------------------------------------------

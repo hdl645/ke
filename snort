@@ -1,0 +1,95 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+原始網頁:Snort 入侵偵測系統
+
+1.介紹
+Snort 它是一套免費的小型「IDS－入侵偵測系統」，可用來偵測網路上的異常封包。它捉取和檢查所有的網路封包，並利用一些入侵偵測規則來判斷網路上是否有可能的入侵行為，而且這些偵測規則是使用開放的方式來發展的，所以你自己也可以加入偵測規則來加強入侵的偵測。
+現在的Snort己經有能力判斷超過1100種入侵行為，就連最近粉紅ramen或Lion都偵測的到，但請切記Snort是一種被動的安全措施，您還是需要與其它的安全措施配和喔。
+
+2.下載及安裝
+首先要先安裝libpcap,可到http://www.tcpdump.org/ 抓取,最新版0.6.2或到http://home.gigigaga.com/keivn0329/libpcap-0.6.2.tar.gz
+
+指令如下
+# tar zxf libpcap-0.6.2.tar.gz
+# cd libpcap-0.6.2
+# cp Makefile.in Makefile
+# ./configure
+# make
+# make clean
+
+
+再安裝snort,可到http://www.snort.org/ 抓取,最新版1.8.3 或到
+http://home.gigigaga.com/keivn0329/snort-1.8.3.tar.gz
+
+指令如下
+# tar zxf snort-1.8.3.tar.gz
+# cd snort-1.8.3
+# ./configure
+# make
+# make install
+# make clean
+
+3.執行
+建議你自行上網找尋相關資料,在這僅簡單介紹!
+首先,snort安裝好後,你可以下 snort -v 指令來看看snort是否可正常運行
+在snort目錄下有一個snort.conf檔,這是default的主要設定檔,
+你可以看一下裡面內容並做適當的修改在此不多加敘述,這個檔案會去include其他的設定檔,
+同樣的,你也可以適當的去修改這些檔案,不過你得先弄懂snort的規則!
+我的啟動指令如下
+# snort -D -c /home/scat/snort-1.8.3/snort.conf
+-D (以daemon方式啟動)
+-c (指定snort依snort.conf設定檔的設定運行)
+
+如此一來,snort就會把偵測到的警告訊息存到/var/log/snort.alert及/var/log/snort/下,
+接下來,就看你如何運用了!!
+
+參數介紹：
+命令行是snort -[options]
+
+選項：
+-A 設置的模式是full,fast,還是none;full模式是記錄
+標準的alert模式到alert文件中；Fast模式只寫入時間戳，messages,
+IPs,ports到文件中，None模式關閉報警。
+-a
+是顯示ARP包；
+-b
+是把LOG的信息包記錄為TCPDUMP格式，所有信息包都被記錄為兩進制形式，名字如snort-0612@1385.log，這個選項對FAST 記錄模式比較好，因為它不需要花費包的信息轉化為文本的時間。 Snort在100Mbps網絡中使用"-b"比較好。
+-c
+使用配置文件,這個規則文件是告訴系統什樣的信息要LOG，或者要報警，或者通過。
+-C
+在信息包信息使用ASCII碼來顯示，而不是hexdump，
+-d
+解碼應用層。
+-D
+把snort以守護進程的方法來運行，默認情況下ALERT記錄發送到/var/log/snort.alert文件中去。
+-e
+顯示並記錄2個信息包頭的數據。
+-F 從文件中讀BPF過濾器（filters），這裡的filters是標準 的BPF格式過濾器，你可以在TCPDump裡看到，你可以查看TCPDump 的man頁怎樣使用這個過濾器。
+-h 設置網絡地址，如一個C類IP地址192.168.0.1或者其他的，使用這個選項，會使用箭頭的方式數據進出的方向。
+-I
+使用網絡接口參數
+-l
+LOG信息包記錄到目錄中去。
+-M
+發送WinPopup信息到包含文件中存在的工作站列表中去，這選項需要Samba的支持，wkstn文件很簡單，每一行只要添加包含在SMB中的主機名即可。（注意不需要\\兩個斜槓）。
+-n
+是指定在處理個數據包退出。
+-N
+關閉LOG記錄，但ALERT功能仍舊正常。
+-o
+改變所採用的記錄文件，如正常情況下採用Alert->Pass->Log order，而採用此選項是這樣的順序：Pass->Alert->Log order，其中Pass是那些允許通過的規則而不記錄和報警，ALERT是不允許通過的規則， LOG指LOG記錄，因為有些人就喜歡奇奇怪怪，像CASPER，QUACK就喜歡反過來操作。
+-p
+關閉雜亂模式嗅探方式，一般用來更安全的調試網絡。
+-r
+讀取tcpdump方式產生的文件,這個方法用來處理如得到一個 Shadow(Shadow IDS產生)文件，因為這些文件不能用一般的EDIT來編輯查看。
+-s LOG
+報警的記錄到syslog中去，在LINUX機器上，這些警告信息會出現在/var/log/secure,在其他平台上將出現在/var/log/message中去。
+-S 這個是設置變量值，這可以用來在命令行定義Snort rules文件中的變量，如你要在Snort rules文件中定義變量HOME_NET,你可以在命令行中給它預定義值。
+-v
+使用為verbose模式，把信息包打印在console中，這個選項使用會使速度很慢，這樣結果在記錄多的是時候會出現丟包現象。
+-V
+顯示SNORT版本並退出；
+-？
+顯示使用列表並退出；
+----------------------------------------------------------------------------------------------------

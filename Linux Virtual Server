@@ -1,0 +1,84 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+轉貼自:小紅帽論壇
+
+設立Lvs的基本目的，就是要建立一套可擴充性與高可用性的叢集系統，在Lvs裡，首先要有一部「Linux指引主機」(Linux Director)或稱「負載平衡器」或稱「虛擬主機」(Virtual Server)，擔任伺服服務流量負載平衡的調節者，Linux Director本身不提供伺服服務，祇做伺服服務的配發而已，在Linux Director之後的是實際提供服務的伺服主機，這些伺服主機稱之為「真實伺服主機」(Real Server)，Real Server以高速的網路與連接，而Linux Director 藉由高效率的排程演算法將Load分散給其後的Real Server 處理，以達到近似平行處理的效果。Real Server可以是不同的作業系統，但必須是提供相同的伺服服務，目前在Red Hat 的Lvs裡只提供www與ftp兩種服務。
+
+負載平衡的實施方式
+實施負載平衡(Load Balancing)的方式可分為兩種不同方式，一在應用層(application-level)另一在IP層實行。
+在應用層負載平衡的實施方式是由「虛擬主機」(Virtual Server)當作NAT Router 並需負責分配外界Client所提出的request排程給內部的真實伺服機群，且要負責改寫及繞送去掉IP head的封包，之後並要將改寫完之封包轉送回client端。
+IP層負載平衡的實施方式則是在內部的真實伺服機接受到由虛擬主機所轉送，由client端所發出的HTTP request時，在處理完工作後直接將回覆結果傳回client端，由於HTTP request與回覆封包發生於TCP/IP機制裡的IP-level，故稱為IP層負載平衡。由於IP層負載平衡接受與回應速度相當快，Linux Director負擔極輕，只做分配及繞送封包的工作，無須改寫任何封包，又加上真實主機能將回應直接傳給client端，因此IP層負載平衡遠優於用層負載平衡。
+
+Lvs的做法共有三種，實施NAT的虛擬主機、實施IP tunneling的虛擬主機及實施Direct Routing的虛擬主機，實施NAT的虛擬主機方式就是上述的應用層負載平衡是建立在NAT的機制之下， 而實施IP tunneling及實施Direct Routing的虛擬主機方式則不相同， 實施IP tunneling及實施Direct Routing的虛擬主機方式則是屬於IP層負載平衡， 兩者的差異在於Direct Routing比IP tunneling的機制更為簡便，Direct Routing和IP tunneling的虛擬主機都只需一個網路介面，而提供伺服服務的真實主機及虛擬主機也都處於真實網域裡，全部也都使用真實IP，只是當client端提出request到虛擬主機時，虛擬主機只做將request排程並繞送給真實主機，當真實主機收到request後進行處理，隨後再將處理結果傳回client端，由於Direct Routing比IP tunneling的虛擬主機工作方式少IP tunneling的步驟，因此在效能及真實主機的擴充性上能更有彈性。
+
+在LVS的環境中有兩大主題，一為建立叢集系統，另一項重點就是建立高可用性系統(High Availability System) 及俗稱的備援系統，而在LVS下的HA可分為兩種，一類應用於LVS的真實主機，一類應用於虛擬主機。
+
+應用於真實主機的HA較單純，主要用於偵測真實主機是否正常運作，若真實伺服主機無法正常運作則不給予排程，其實作方式是在虛擬主機上安裝稱為moniter的daemon，應用於虛擬主機上的HA較複雜，其主要目的是偵測主要虛擬主機是否正常運作，若主要虛擬主機無法正常運作，則必須在數秒之內由另一部備援的虛擬主機代替原來的虛擬主機，並且取代其原來的工作，包括排程、分配request及監督real server是否運作正常，其實作方式是在主要及備援兩部虛擬主機上都安裝heartbeating daemon 、相同的備援組態檔與fake daemon。如備援主機發現主要虛擬主機沒有存活跡象，就立刻啟動fake daemon，fake daemon會依據備援組態檔所定義的內容，將主要虛擬主機上的floating IP..等LVS相關設定活動起來，讓虛擬主機所扮演的Load balancer角色依然能夠正常運作下去，以達到取代虛擬主機的目的。
+
+在實作方面可分為圖形化介面編譯(採用piranha)及直接編譯在/etc目錄下直接進行lvs.cf的組態檔設定，如採用NAT機制則可以圖形化介面工具piranha實作NAT LVS，而採用Direct Routing與IP tunneling的虛擬主機機制則只能用編譯lvs.cf的組態檔設定方式設定。在Red Hat Linux的LVS系統裡，整個系統運作的核心在LVS daemon，而lvs又是根據「etc/lvs.cf」的設定檔執行，lvs.cf除了可使用piranha設定外，也可以自行以手動方式做設定，在下面先將編譯過後之lvs.cf的組態檔略加敘述(以piranha設定Cluster System的方式只提供NAT方式，另兩種IP tunneling、Direct routing目前暫不提供，排程演算法則提供RRS、WRRS及WLCS三種。)：
+
+primary=163.21.136.10 (1)
+nat_router=192.168.1.254 eth1:1 (2)
+backup_active=1 (3)
+backup=163.21.236.11 (4)
+
+virtual v1{ (5)
+address=163.21.136.100 eth0:1 (6)
+active=1
+load_monitor=ruptime
+scheduler=wrr
+
+
+server r1{ (7)
+address=192.168.1.1
+active=1
+weight=4
+}
+server r2{
+address=192.168.1.2
+active=1
+weight=3
+}
+server r3{
+address=192.168.1.3
+active=1
+weight=2
+}
+
+(1) primary:用來指定主要虛擬主機對外服務的固定IP Address，如：163.21.136.10，此IP不是對外真正宣佈的IP。
+(2) 作為nat_router:用來指定主要虛擬主機作為NAT閘道的Floating IP Address，如：192.168.1.254 eth1:1。
+(3) back_active：設定是否使用備援主機，即實作HA系統，內定值為0，若要使用備援主機請設定為1。
+(4) backup：用來指定備援虛擬主機的對外服務固定IP Address，如：163.21.236.11，處於備用狀態。
+(5) virtual主要虛擬主機名稱，在lvs.cf檔裡，LVS系統的機群，包括主要虛擬主機、真實伺服主機，必須以『virtual主要虛擬主機名稱』作為宣告，主要虛擬主機名稱可自訂，無特別講究，如：virtual v1，其後以{LVS系統相關設定}承接。
+(6) LVS系統相關設定：此區塊是以「{ }」作為開始及結尾，有關主要虛擬主機及真實伺服主機均需在此區塊裡作宣告，首先你必須先宣告主要虛擬主機的設定，通常可設定如下。
+
+Address=163.21.136.100 eth0:1
+Active=1
+Load_moniter=ruptime
+Scheduler=wrr
+
+(7) 真實伺服主機的相關設定：首先你必須以『server真實伺服主機名稱』作為宣告，如：server r1，真實伺服主機名稱可自訂，無特別講究，此區塊是以『{ }』作為開始及結尾，有關真實伺服主機的設定均需在此區塊作宣告，通常可設定如下：
+
+server r1{
+address=192.168.1.1
+active=1
+weight=4
+}
+事實上沒有lvs daemon，一樣可以實作LVS系統，當然，靠的是ipvsadm與nanny daemon，現在就以手動方式實作IP tunneling 與Direct Routing兩種型態的LVS系統，我在此只介紹效能較佳的Direct Routing LVS，相關設定資料如下：
+
+主機名稱 FQDN IP address 備 註
+主要虛擬主機 無 163.21.136.10 eth0:真實IP
+主要虛擬主機 無 163.21.136.100 eth0:真實IP
+主要虛擬主機www.test.edu.tw 163.21.136.201 eth0:1浮動IP真實伺服主機一 無 163.21.136.202 WWW伺服主機真實伺服主機二 無 163.21.136.203 WWW伺服主機真實伺服主機三 無 163.21.136.10 WWW伺服主機
+
+若此Direct Routing LVS的排程演算法皆使用wlc，那麼全部設定如下：
+1. ipvsadm –A –t 163.21.136.100:80 –s rr
+2. ipvsadm –a –t 163.21.136.100:80-r 163.21.136.201 –g –w6 –s rr
+3. ipvsadm –a –t 163.21.136.100:80-r 163.21.136.202 –g –w4 –s rr
+4. ipvsadm –a –t 163.21.136.100:80-r 163.21.136.203 –g –w2 –s rr
+5. 啟動nanny
+6. 設定主要虛擬主機可將封包繞送到真實虛擬主機。
+7. 最後記得在真實伺服主機上，設定可將封包繞送到client端。
+
+----------------------------------------------------------------------------------------------------

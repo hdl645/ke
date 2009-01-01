@@ -1,0 +1,13 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 安裝 hspice
+	1. mkdir /cadtools/hspice
+	2. tar xzvf hspice_2001.4.tgz -C /cadtools/hspice
+	3. ln -s /cadtools/hspice/ /usr/meta
+	4. ln -s /cadtools/hspice/2001.4 /usr/meta/cur
+	5. tar xzvf cshrc.tgz -C /usr/meta/cur/bin
+	6. 在 .cshrc 加上 source /usr/meta/cur/bin/cshrc.meta
+	7. 確定 /etc/hosts 內有 lsntu 的 ip; lsntu2 不提供 hspice 的 license
+	
+----------------------------------------------------------------------------------------------------

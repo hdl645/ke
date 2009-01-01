@@ -1,0 +1,41 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* set_fs(get_ds())
+
+	任何 process 在呼叫 system call 之時, 每個 system call 內部都是用 copy_from_user(), copy_to_user(), __generic_copy_from_user(), __gerneric_copy_to_user() 等函式來複製參數, 防止該 process 企圖利用 system call 的參數中指標來取得 kernel space 的資料. 檢查方法很簡單, 就是看有沒有超過 current->addr_limit 但是, 問題就出在這兒. 即使是要載入 Kernel Module, init_module() 所屬 process 的 addr_limit 因為 fork() 的關係, 繼承到的 addr_limit 最大只會到 (PAGE_OFFSET -1), 當 init_module() 之中欲執行 system call 時, 就會出現上述 copy 系列函式拒絕複製呼叫 system call 時給定的參數. 所以, 要在呼叫 system call 前先執行 set_fs( get_ds() ), get_ds() 會幫我們取得 KERNEL_DS (0xFFFFFFFF), set_fs() 會幫我們把指定值設定到 current->addr_limit. 在 cleanup_module() 也是有相同情況.
+
+	Q: 在已經連到到 kernel 的 module 中, 呼叫 system call 是否還需要 set_fs( get_ds() ).
+
+----------------------------------------------------------------------------------------------------
+
+* 2.6 kernel modules 的 modules.conf
+
+	此版本的核心已經改用 /etc/modprobe.conf; 不再用 /etc/modules.conf
+
+	以我的debian為例, 剛升級到 2.6.0 時開機無法自動載入網路卡module, 將下列兩行加到 /etc/modprobe.conf 即可.
+
+	alias eth0	8139too
+	alias eth1	via-rhine
+
+----------------------------------------------------------------------------------------------------
+
+* mmap 問題
+
+	Broadcom 的 nvram driver 使用內部的全域變數，做為存變數值的地方，並允許將該區域 mmap 到 nvram library。
+	在移植此 driver 時發現一現象，若編成模組，則driver 提供的 mmap method 不會被 mmap() 呼叫到。
+	若將 driver 直接編入 566 kernel 則一切正常。 原因不明。
+
+	另外，若將該區域改成 module init 時使用 kmalloc() 動態配置，則編入 kernel 或編成 module 皆正常。
+
+----------------------------------------------------------------------------------------------------
+
+* 2.6 kernel, 無 mmu 的 mmap
+
+	在此條件下，driver 必須先提供一個 get_unmapped_area method， 否則 kernel 不會呼叫 driver 的 mmap method。
+	至於此函式需要做什麼？ 其實只要檢查要 mapping 的參數合法性，然後傳回 0 即可。
+	該傳回值會被導入 mmap method 的 vma->vm_start。
+
+	而 nommu 的 memory mapping 會再將 vma->vm_start 對到要映射區域的 physical address。 所以 get_unmapped_area 的傳回值只要不是代表錯誤的都沒關係。
+
+----------------------------------------------------------------------------------------------------

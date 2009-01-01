@@ -1,0 +1,831 @@
+vim:ts=4:tw=1024:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 安裝 OpenSSH
+
+	1. 安裝 112438-01 號修補檔, 重新啟動 ==> 讓solaris 2.8的核心支援亂數產生器 (/dev/random)
+
+	2. 安裝下列套件
+		+ openssh-3.5p1-sol8-sparc-local.gz
+		+ openssl-0.9.6g-sol8.sparc-local.gz
+		+ tcp_wrappers-7.6-sol8-sparc-local.gz	(可有可無，但強烈建議安裝)
+		+ zlib-1.1.4-sol8-sparc-local.gz
+		+ libgcc-3.2-sol8-sparc-local.gz
+		+ perl-5.6.1-sol8-sparc-local.gz 	(可有可無)
+		+ prngd-0.9.25-sol8-sparc-local.gz 	(可有可無)
+		+ egd-0.8-sol8-sparc-local.gz 		(可有可無)
+
+	3. 把 /usr/local/lib:/usr/local/ssl/lib 加到 LD_LIBRARY_PATH
+		把 /usr/local/bin:/usr/local/sbin 加到 PATH
+
+	4. mkdir /var/empty
+		chown root:sys /var/empty
+		chmod 755 /var/empty
+		groupadd sshd
+		useradd -g sshd -c 'sshd privsep' -d /var/empty -s /bin/false sshd
+
+	5. 把 sshd:ALL:allow 加到 /etc/hosts.allow (依個人需要而定，不一定要全部IP開放)
+
+	6. ssh-keygen -t rsa1 -f /usr/local/etc/ssh_host_key -N ""
+		ssh-keygen -t dsa  -f /usr/local/etc/ssh_host_dsa_key -N ""
+		ssh-keygen -t rsa  -f /usr/local/etc/ssh_host_rsa_key -N ""
+
+	7. 撰寫 /etc/init.d/ssh script
+		#!/bin/sh
+		pid=`usr/bin/ps -e | /usr/bin/grep shd | /usr/bin/sed -e 's/^  *//' -e 's/ .*//'`
+		case $1 in
+		'start')
+			/usr/local/sbin/sshd
+			;;
+		'stop')
+			if [ "${pid}" != "" ] ; then
+				/usr/bin/kill ${pid}
+				fi
+				;;
+		*)
+			echo "usage: /etc/init.d/sshd {start|stop}"
+			;;
+		esac
+
+	8. chown root:sshd /etc/init.d/sshd
+		chmod 555 /etc/init.d/sshd
+		ln -s /etc/init.d/sshd /etc/rc3.d/S98sshd
+
+	9. 完工，建議打一下/etc/rc3.d/S98sshd start檢查一下，若沒問題則下次開機應該能正常啟動。
+
+	備註：openssl似乎應該在openssh之前安裝
+
+	備註：有時會有很奇怪的情況發生，比如說找不到/usr/local/bin/ssh-keygen、/usr/local/ssl/lib/libcrypt*等等
+
+----------------------------------------------------------------------------------------------------
+
+* 手動設定網路
+
+	1. /etc/hostname.eri0 	==> 裡面存放 eri0 界面的ip或者可以在 /etc/hosts 內找到 ip 的化名. 其中 eri0 是工作站內建網卡的代號. 若是插在主機板上的網卡則以 hme0 開始編號.
+
+	2. /etc/hosts				==> 存放 ip 與化名的對照表
+
+	3. /etc/nodename			==> 存放工作站的 hostname
+
+	4. /etc/defaultrouter	==> 存放 default router 的 ip, 直接輸入 ip 後存檔即可.
+
+	5. /etc/resolv.conf		==> 存放 domain name, DNS IP, 範例如下:
+		domain uicc.ntust.edu.tw
+		nameserver 140.118.41.146
+		nameserver 140.118.2.53
+		nameserver 140.118.31.99
+
+	6. /etc/nsswitch.conf	==> hosts: 那一欄必須要有 dns 這個關鍵字, 否則即使設定好 /etc/resolv.conf 也不會有作用.
+
+	7. 設定好了後建議重新開機 (init 6) , 因目前尚未確定 /etc/init.d/ 下哪個 script 可以完整重新啟動網路.
+
+----------------------------------------------------------------------------------------------------
+
+* Solaris 下的套件管理
+
+	在 www.sunfreeware.com 抓到檔案名稱格式如 xxxxx-?.??-sol8-sparc-local 的或者在 solaris 安裝光碟的 s0 目錄下各子目錄. 
+		+ xxxxx 表軟體名稱, 並非是套件管理系統所認得的名稱; 
+		+ ?.?? 表版本編號; 
+		+ sol8 表示在 Solaris 8 下可正常執行; 
+		+ sparc 表硬體平台; 
+		+ local 表示裝在 /usr/local 
+	以 tcp_wrappers-7.6-sol8-sparc-local 為例. 
+
+	1. 安裝
+		pkgadd -d tcp_wrappers-7.6-sol8-sparc-local
+		pkgadd -d 己解開的套件檔案所在目錄 (如 solaris 安裝光碟)
+
+	2. 查詢套件名稱及相關資訊
+		pkginfo -d tcp_wrappers-7.6-sol8-sparc-local
+		查詢系統已安裝套件
+		pkginfo
+
+	3. 移除套件
+		+ 先用 pkginfo -d tcp_wrappers-7.6-sol8-sparc-local 或 pkginfo | grep '和套件有關的關鍵字' 找出套件名稱, 以 tcp_wrappers-7.6-sol8-sparc-local 為例, 找到的名字是 SMCtcpwr
+		+ 再用 pkgrm SMCtcpwr 移除
+
+	4. 驗證套件
+		pkgchk
+		pkgchk SMCtcpwr
+
+	備註: 目前有想到兩個問題未解:
+		+ 如何一次安裝多個套件? pkgadd 的 -d 參數似乎沒辦法用
+		+ 如何由系統上已存在的檔案反查出隸屬於哪一個套件? 
+		A: /var/sadm/install/contents
+		
+----------------------------------------------------------------------------------------------------
+
+* 修補檔的安裝移除
+
+	1. 安裝修補檔, -p 的功能是列出目前正在修補的檔案
+		patchadd 解開的修補檔所在目錄 -p 
+
+	2. 移除修補檔
+		patchrm 修補檔id
+
+	備註: 看man page, patchadd 及 patchrm 似乎還有更進階的用法, 待以後有空再研究.
+----------------------------------------------------------------------------------------------------
+
+* 安裝 TCP Wrapper
+
+	1. gzip -d tcp_wrappers-7.6-sol8-sparc-local.gz
+
+	2. pkgadd -d tcp_wrappers-7.6-sol8-sparc-local
+
+	3. 改 /etc/inetd.conf, 把要套用 TCP Wrappers 的服務都改掉, 但是並不是每個服務都支援 TCP Wrapper; 修改範例如下:
+		telnet	stream	tcp6	nowait	root	/usr/sbin/in.telnetd	in.telnetd
+		telnet   stream   tcp   nowait   root  /usr/local/bin/tcpd  in.telnetd
+		由上列兩列可看出, 主要是
+		+ 修改第三欄tcp6 ==> tcp, 若不拿掉 6 的話, TCP Wrapper 無法正常工作, 有的時候是全部 ip 都連的進來; 有的時候是全部 ip 都連不進來.
+		+ 修改第六欄, 把原程式改成 tcpd 所在路徑, 以絕對路徑表達.
+
+	4. 編寫 /etc/hosts.allow 與 /etc/hosts.deny, 更進階用法請參考文件, 簡單範例如下: 
+		+ /etc/hosts.allow
+			in.telnetd : 140.118.0.0/255.255.0.0 : allow
+		+ /etc/hosts.deny
+			ALL : ALL : deny
+
+	5. 用 ps -A | grep inetd 找出 inetd 的 pid, 並以 kill -HUP xxx 強制重新啟動 inetd
+
+	Q: 到底改/etc/inetd.conf是不是必要的呢？像我在LINUX下設定sendmail，單獨執行，不用改inetd.conf或xinetd.conf一樣有支援TCP Wrapper。是不是要看該軟體程式本身有沒有支援呢？
+
+----------------------------------------------------------------------------------------------------
+
+* 進入 OK Mode
+
+	按 Stop + A 鍵即可.
+
+----------------------------------------------------------------------------------------------------
+
+* 換網卡的 Mac Address, 以 eri0 為例
+
+	ifconfig eri0 ether 1:2:3:4:5:6
+
+----------------------------------------------------------------------------------------------------
+
+* solaris 下的關機
+
+	shutdown -gXX -y		切換到單人模式, XX 代表廣播的秒數
+	init 0					進 ok 模式	
+	init 1					進 單人 模式
+	init 5					直接關機
+	init 6					重新開機
+
+----------------------------------------------------------------------------------------------------
+
+* solaris 下和磁碟維護有關指令
+
+	drvconfig
+	disks
+	fdisk
+
+----------------------------------------------------------------------------------------------------
+
+* 忘了 root 密碼
+
+	
+	按Stop-A入ok提示符
+	ok boot cdrom -s (放入安裝光碟)
+	mount /dev/dsk/c0t0d0s0 /mnt (把根目錄掛上來)
+	TERM=vt100;export TERM
+	vi /mnt/etc/shadow
+	刪除root的加密後密碼，比如
+	root:WxzL460hohWsU:10724::::::
+	刪除WxzL460hohWsU，存檔後重開機
+
+	註: 也可以不先進 ok mode, 直接 /usr/sbin/reboot -- "cdrom -s" 
+----------------------------------------------------------------------------------------------------
+
+* 檢測有什麼scsi設備接到主機上
+
+	1. 進ok 模式
+	2. probe-scsi-all
+
+----------------------------------------------------------------------------------------------------
+
+* 鍵盤失效
+
+	1. 可能是用戶按到 ctrl + s, 試試 ctrl + q 能否解決.
+	2. 進 ok 模式, setenv inputdevice keyboard, 重開機 ( 直接在OK模式下GO命令是否可以？)
+
+----------------------------------------------------------------------------------------------------
+
+* 允許root直接telnet (不建議使用)
+
+	把 /etc/default/login 內 CONSOLE=/dev/console 註解掉即可.
+
+----------------------------------------------------------------------------------------------------
+
+* 設定系統預設語系及時區等資料的檔案
+
+	/dev/default/init
+
+----------------------------------------------------------------------------------------------------
+
+* 讓 solaris 識別新安裝的硬體
+
+	方法一: 進 ok mode, 輸入 boot -r
+	方法二: sync ; sync ; sync ; reboot -- -r
+	方法三: touch /reconfigure ; sync ; sync ; sync ; reboot
+
+----------------------------------------------------------------------------------------------------
+
+* 新接了硬碟, 不想用 boot -r
+
+	1. modunload -i 0
+	2. drvconfig(1M)
+	3. devlinks(1M)
+	4. disks(1M)
+
+	註: 若需格式化, 製作檔案系統, 請用 format(1M), newfs(1M)
+
+----------------------------------------------------------------------------------------------------
+
+* /etc 下重要檔案說明
+
+/etc
+
+The following configuration files, located in /etc, should be examined and modified as appropriate. This list is not all-inclusive; it includes only Solaris 8 system configuration files. Other application-specific configuration files (such as of Apache, Secure Shell, and others) should also be checked for security-conscious configuration.
+
+    /etc/auto_home
+
+    Automounter's home directory map file. Comment out +auto_home to disable home mounting.
+
+    /etc/auto_master
+
+    Automounter's master file. Comment out everything that is not currently being used. Keep the number of automounted resources to a minimum. Better yet, do not use automounter.
+
+    /etc/bootrc
+
+    The boot loader configuration file. Comment out set boot_timeout to prevent automatic booting after power-on. (Note that this might not be desired on headless systems.)
+
+    /etc/coreadm.conf
+
+    The core files configuration file. Do not edit this yourself. Use coreadm(1) to change defaults.
+
+    /etc/default/cron
+
+    cron's configuration file. Make sure CRONLOG is set to YES.
+
+    /etc/default/devfsadm
+
+    The device administrator's configuration file. Use devfsadm(1M) to configure.
+
+    /etc/default/dhcpagent
+
+    The DHCP agent's configuration file. See dhcpagent(1M) for more information.
+
+    /etc/default/inetinit
+
+    Sets the TCP initial sequence number generator's parameters. Set TCP_STRONG_ISS to 1 or 2, never to 0 (2 is best).
+
+    /etc/default/kbd
+
+    The console keyboard's configuration. In some cases, you might want to disable the ABORT sequence by setting KEYBOARD_ABORT to disable: KEYBOARD_ABORT=disable.
+
+    /etc/default/login
+
+    The login configuration file. Very important. Make sure that the following are set:
+
+            CONSOLE=/dev/console
+
+            Permits root logins only from the console.
+
+            PASSREQ=yes
+
+            Requires passwords.
+
+            TIMEOUT=120
+
+            Sets the login timeout to 2 minutes. 註: 最大好像只能指定 0~900 秒
+
+            UMASK=077
+
+            Sets umask to o-rwx,g-rwx.
+
+            SYSLOG=yes
+
+            Logs all root logins.
+
+            SLEEPTIME=5
+
+            Delays before printing the Login incorrect message.
+
+            RETRIES=1
+
+            Allows only one try.
+
+            SYSLOG_FAILED_LOGINS=0
+
+            Logs all failed login attempts.
+
+    /etc/default/nfslogd
+
+    Sets NFS logging levels. See nfslogd(1M) for more information.
+
+    /etc/default/passwd
+
+    The passwd configuration file. Very important. Set PASSLENGTH to 8 (PASSLENGTH=8) to require passwords to be a minimum of eight characters long. The default setting of 6 is inadequate.
+
+    /etc/default/su
+
+    The su(1) configuration file. Make sure the following are set:
+
+            SULOG=/var/adm/sulog
+
+            Logs all su attempts in /var/adm/sulog.
+
+            CONSOLE=/dev/console
+
+            Logs su attemps to the console.
+
+            SYSLOG=yes
+
+            Logs su attempts via syslog.
+
+    /etc/defaultrouter
+
+    Contains the IPv4 address of the default router. Make sure it is the correct one.
+
+    /etc/dumpadm.conf
+
+    Do not edit this yourself. Use dumpadm(1M). In many cases, you might want to disable dumps.
+
+    /etc/ftpusers
+
+    A list of users denied FTP service. If you must use FTP, make sure all users who don't need or are not authorized to use FTP are in this file. In any case, it should contain root, daemon, nobody, bin, sys, adm, and other system accounts. Make sure it is not writable by anyone.
+
+    /etc/group
+
+    Contains the UNIX groups list. Check group memberships.
+
+    /etc/inet/hosts (also known as /etc/hosts)
+
+    The IPv4 hosts table. Make sure it contains entries for the system itself, for localhost, and for loghost:
+
+    127.0.0.1localhost loghost
+
+    /etc/inet/inetd.conf
+
+    The Internet daemon's (inetd) configuration file. Very important. Comment out (disable) everything that is not currently used. For configuration options, see inetd(1M).
+
+    /etc/inet/ipsec.key
+
+    Contains IPsec keys. See ipseckey(1M) for more information.
+
+    /etc/inet/ipsecinit.conf
+
+    IPsec's configuration file. See ipsecconf(1M) for more information.
+
+    /etc/inet/ipsecpolicy.conf
+
+    IPsec system policy. See ipsecconf(1M) for more information.
+
+    /etc/init.d/*
+
+    Boot scripts. Disable everything that is not currently used.
+
+    /etc/mail/aliases
+
+    sendmail's aliases database (text file). Make sure root, nobody, postmaster, daemon, and other system accounts are aliased to a working e-mail account, preferably on the same system.
+
+    /etc/mail/sendmail.cf (aka /etc/sendmail.cf)
+
+    sendmail's configuration file.
+
+    /etc/nfssec.conf
+
+    The Network File System (NFS) security configuration file. Do not edit this yourself. See nfssec(5) and mount_nfs(1M) for more information. Use dh or krb4. Do not use sys or none.
+
+    /etc/nodename
+
+    Node (also known as host) name. Make sure it contains the actual and correct host name.
+
+    /etc/nscd.conf
+
+    The name service cache daemon's (nscd) configuration file. See nscd(1M) for more information. Generally, it is recommended that you disable nscd unless you have strong reasons not to.
+
+    /etc/nsswitch.conf
+
+    The name service switch configuration file. Very important. Make sure all sources start with "files." See nsswitch.conf(4) for more information.
+
+    /etc/pam.conf
+
+    Pluggable Authentication Modules' configuration file. See pam.conf(4) for more information.
+
+    /etc/passwd
+
+    The password file?without passwords. Make sure it is not writable by anyone.
+
+    /etc/shadow
+
+    Very important. The password file. Contains encrypted passwords. Make sure it is readable only by root. All other permissions should be disabled using -r--------.
+
+    /etc/syslog.conf
+
+    The system logging (syslog) server configuration. See syslogd(1M) for more information.
+
+    /etc/system
+
+    Important. The kernel's configuration file. See system(4) for more information.
+
+    /etc/vfstab
+
+    The virtual file system configuration.
+
+    /etc/vold.conf
+
+    The Volume Management server's configuration file.
+
+    /etc/resolv.conf
+
+    The DNS resolver's configuration file.
+
+    /etc/profile
+
+    The global shell profile.
+
+
+----------------------------------------------------------------------------------------------------
+
+* 網路程式無法使用 domain name, 但是 nslookup 可以把 domain name 轉 ip
+
+	/etc/resolv.conf 有設定 namerserver, 但是若 /etc/nsswitch.conf 內的 host: 沒有加上 dns 就會發生此狀況.
+
+----------------------------------------------------------------------------------------------------
+
+* 切換解析度的方法
+
+	+ 查詢目前解析度及支援的解析度
+
+		m64config -prconf	(prconf == print configuration)
+
+	+ 測試解析度(設定解析度為 1024x768, 垂直掃瞄頻率為 60 Hz, 顏色數為 8-bit)
+
+		m64config -res 1024x768@60 try -depth 8
+
+	+ 設定為某解析度, 且目前生效(解析度, 掃瞄頻率及顏色數與上例相同)
+
+		m64config -res 1024x768@60 now -depth 8
+
+	註: 此程式是設定 OWconfig 檔案.
+
+	註: 使用 m64config 是因為該工作站的繪圖卡為 M64 系列. 若使用 Frame Buffer 則可能要用 fbconfig 或 ffbconfig 吧, 請看 /usr/sbin 目錄
+
+	註: 在 KVM (螢幕, 鍵盤切換器) 下切換解析度後畫面會糊掉, 必須重新開機才行. 而且, 若 KVM 接的多台工作站用不同的解析度, 頻率. 似乎只能有一種解析度能正常動作(我測試結果是第一台)
+		
+
+----------------------------------------------------------------------------------------------------
+
+* 由檔案反查回所屬套件方法
+
+	1. pkgchk -l -p /path/to/file 一定要加絕對路徑. 不過這個方法似乎不會很好用, 常常沒出現什麼結果就結束了.
+
+	2. 直接用 grep 在 /var/sadm/install/contents 查詢要查的檔案,看最後一個欄位即可.
+
+----------------------------------------------------------------------------------------------------
+
+* /var 爆掉解決方法
+
+	開機給大量使用者登入的工作站 /var/adm/wtmp, /var/adm/wtmpx 都相當的大, 有空可以將該檔案清除.
+
+	註: 該檔案是給 last 查詢過去登入的使用者登入時間等資料
+
+	註: 可以執行 du -ks * 查看哪一個目錄佔用空間最大
+
+----------------------------------------------------------------------------------------------------
+
+* 使 RPC Secure Password 與 login password 一致
+
+Q.  	nisplus 的設定 ?
+ A. 	
+  NIS+ 有"login passwd" 與 "Secure-RPC password"之分別,
+  使用者二者密碼若不一致, 將無法更改 "login passoword" 與進入
+  新的工作站. 使用者若進入 olympus 時無法正確執行 "passwd" 或無法進入
+  新工作站, 亦或是 logout 時出現
+  Could not unset your secret key.
+  Maybe the keyserver is down?
+  就是二者密碼不一致. 請遵循以下步驟更改之.
+
+  一旦更改完成, 使用者的"Secure-RPC password"將與"login password"一致,
+  以後若需更改密碼仍用 "passwd", 系統將會自動將二者設成一致
+
+  ---- 更 改 方 法 ----
+  舊有使用者的 "Secure-RPC password"一律設成 nisplus, 請遵循以下步驟
+  更改之. (以使用者 klim 為例)
+  ===============================================================================
+  olympus@~> chkey -p <-------------------------------- 輸入之命令
+  Updating nisplus publickey database.
+  Reencrypting key for 'unix.58@ncnu.edu.tw'.
+  Please enter the Secure-RPC password for klim: <----- 輸入 nisplus
+  Please enter the login password for klim: <---------- 輸入原 login password
+  olympus@~>
+  ===============================================================================
+
+----------------------------------------------------------------------------------------------------
+
+* 出現 RPC: Program not registered 解決方法
+
+	請檢查該機器上是否有執行 mountd, nfsd.  一般來說, 只要 /etc/dfs/dfstab 有分享則開機時會自動執行上述兩個 daemon. 手動執行方法:
+
+	/usr/lib/nfs/mountd
+	/usr/lib/nfs/nfsd -a 16
+
+----------------------------------------------------------------------------------------------------
+
+* 設定 NIS 步驟
+
+	1. 選定主要伺服器及次要伺服器(不一定要次要伺服器)
+
+		設定主要伺服器步驟:
+
+			確定是否有設好網域, 檢查方法, cat /etc/defaultdomain
+
+				若沒有則執行 echo "uicc" > /etc/defaultdomain ; domainname uicc 其中的 uicc 即網域名稱
+
+			將 /etc/nsswitch.conf 改用 /etc/nsswitch.nis (cp /etc/nsswitch.nis /etc/nsswitch.conf)
+
+			在 /etc 下建立專門給 NIS 用的目錄, 在此採用 /etc/yp
+
+			到 /var/yp 修改 Makefile, 把 DIR, PWDIR 設成 /etc/yp; 把 ALIASES 設成 /etc/yp/aliases
+
+			將所有要設在 NIS 上的帳號從所有主機的 /etc/passwd 及 /etc/shadow 抽出來, 將 root, daemon, bin, sys, adm, lp, uucp, nuucp, listen, nobody, noaccess, nobody4,sshd 等管理員帳號刪除, 只留下使用者帳號. 並將各使用者的家目錄設成在 /home/$USER (別笨笨的真的打 $USER) (在其它目錄也可以, 但是記得等會兒寫 auto_home 檔案時目錄也要一起改)
+
+			將所有主機上被設到 NIS 上的帳號的家目錄也改成 /home/$USER 下. 其實此步驟非必要, 只是希望使用者不管是連到原主機或其它主機看到的家目錄都是相同的.
+
+			在 /etc/hosts 內設定 nis 主要伺服器及次要伺服器, 記得各主機還要多設一個 主機名.網域名 的項目. 如下所示:
+
+				140.118.43.101	pc-1	pc-1.uicc
+
+			設定 /etc/yp/auto_master, 範本如下:
+
+			# Master map for automounter
+			#
+			+auto_master
+			/net            -hosts          -nosuid,nobrowse
+			/home           auto_home       -nosuid,nobrowse
+			/xfn            -xfn
+			/-              auto_direct    -ro
+
+			設定 /etc/yp/auto_home (Indirect map), 第一欄是mapname, 第二欄是所在主機, 記得要寫清楚該使用者所有真正的家目錄位址, 至於 & 符號則是用來替代第一欄的 mapname. 雖然在 auto_home 之中可以使用 * 符號, 但是此符號似乎無法與其它字串作搭配. 只好把每一位使用者都寫出來了. 範本如下:
+
+			# cat auto_home|more
+			# Home directory map for automounter
+			#
+			+auto_home
+			 
+			 # PC-1
+			 hdl1            pc-1:/export/home/&
+			 alex1           pc-1:/export/home/&
+			 # PC-22
+			 hdl2            pc-22:/export/home/user2/&
+			 alex            pc-22:/export/home/user2/&
+			 m9102245        pc-22:/export/home/user2/$
+			 a9002004        pc-22:/export/home/user2/$
+			 # PC-23
+			 hdl3    pc-23:/export/home/&
+			 soc01   pc-23:/export/home/&
+			 soc02   pc-23:/export/home/&
+			 # PC-24
+			 hdl4            pc-24:/space/home/&
+			 a9015013        pc-24:/space/home/&
+			 # PC-25
+			 hdl5            pc-25:/export/home/user1/&
+			 a8907078        pc-25:/export/home/user1/&
+			 a8907087        pc-25:/export/home/user1/&
+
+			/etc/yp/auto_direct (Direct Map) 範本如下:
+
+			/archive     pc-22:/archive
+
+			設定 /etc/auto_master, 範本如下:
+			# Master map for automounter
+			#
+			+auto_master
+			/net            -hosts          -nosuid,nobrowse
+			/home           auto_home       -nobrowse
+			/xfn            -xfn
+			/-              auto_direct     -ro,nosuid,nobrowse
+
+			設定 /etc/auto_home, 範本如下:
+			# Home directory map for automounter
+			#
+			+auto.home
+
+			設定 /etc/auto_direct, 範本如下:
+			/archive	pc-22:/archive
+			註: 在 NIS 客戶端若沒有設定這個檔案似乎就無法掛指定目錄(/archive)了, 但是主要伺服器端似乎沒關係.
+
+			修改 /var/yp/Makefile, 仿照 auto_master 格式, 在 all: 後方加入 auto.direct (注意, 是小數點); 再來仿照 auto.master target 的格式照抄, 範本如下:
+
+			auto.direct.time:  $(DIR)/auto_direct
+			   -@if [ -f $(DIR)/auto_direct ]; then \
+	           sed -e "/^#/d" -e s/#.*$$// $(DIR)/auto_direct \
+	           | $(MAKEDBM) - $(YPDBDIR)/$(DOM)/auto.direct; \
+	           touch auto.direct.time; \
+	           echo "updated auto.direct"; \
+	                if [ ! $(NOPUSH) ]; then \
+	                        $(YPPUSH) auto.direct; \
+	                        echo "pushed auto.direct"; \
+	                else \
+	        	        : ; \
+	                fi \
+	        	else \
+	                echo "couldn't find $(DIR)/auto_direct"; \
+	        	fi
+
+			然後在Makefile檔案最後面加上auto.direct: auto.direct.time.
+
+			把其它要散佈給其它主機的檔案, 如 hosts 都複製到 /etc/yp, 並確定 /var/yp/Makefile 有處理該檔案.
+
+			初如化 NIS 主要伺服器 cd /var/yp ; /usr/sbin/ypinit -m ; /usr/lib/netsvc/yp/ypstart
+
+			至此應該沒問題了, 可重新開機並執行 ps -ef | grep yp 檢查服務是否有被執行.
+
+			以後若有更動到 /etc/yp 的檔案, 要記得到 /var/yp 執行 make 使檔案內容發佈出去. 另外, 若是改到 /etc/yp/auto* 則所有主機的 autofs 需視情況重新啟動
+
+==================================================
+
+		設定 NIS 客戶端
+
+			同主要伺服器, 要設定網域, 把伺服器加入 /etc/hosts, 採用 /etc/nsswitch.nis
+
+			/usr/sbin/ypinit -c 輸入所有主要, 次要伺服器
+	
+==================================================
+
+		設定 NIS 次要伺服器
+
+			同主要伺服器, 要設定網域, 把伺服器加入 /etc/hosts, 採用 /etc/nsswitch.nis
+
+			/usr/sbin/ypinit -c 輸入所有主要伺服器
+
+			/usr/sbin/ypinit -s 主要伺服器
+
+			視情況執行 /usr/lib/netsvc/yp/ypstop ; /usr/lib/netsvc/yp/ypstart
+
+----------------------------------------------------------------------------------------------------
+
+* pgrep
+
+	pgrep 程式名
+
+		找出指定程式的 PID.
+
+----------------------------------------------------------------------------------------------------
+
+* 安裝 Patch Manager Tool 方法
+
+	以 Solaris 2.8 為例：
+
+	從 https://sunsolve.sun.com/patchpro/patchpro.html 下載 https://sunsolve.sun.com/patchpro/pproSunOSsparc5.8jre2.1.tar.gz
+
+		tar xzvf pproSunOSsparc5.8jre2.1.tar.gz
+		cd pproSunOSsparc5.8jre2.1
+		./setup
+
+	若上述壓縮檔內未包含SUNWcert套件，則可至同一網頁下載並用pkgadd安裝
+
+	再來安裝各項certificate
+
+		Accept the class B certificate
+			/usr/j2se/bin/keytool -import -alias smicacert -file /etc/certs/SUNW/smicacert.b64  -keystore /usr/j2se/jre/lib/security/cacerts
+			預設密碼為：changeit
+			檢查一下FINGERPRINT是否符合：
+				Certificate fingerprints:
+	         MD5:  B4:1F:E1:0D:80:7D:B1:AB:15:5C:78:CB:C8:8F:CE:37
+   	      SHA1: 1E:38:11:02:F0:5D:A3:27:5C:F9:6E:B1:1F:C4:79:95:E9:6E:D6:DF
+
+
+		Accept the root certificate
+			/usr/j2se/bin/keytool -import -alias smirootcacert -file /etc/certs/SUNW/smirootcacert.b64  -keystore /usr/j2se/jre/lib/security/cacerts
+			預設密碼為：changeit
+			檢查一下FINGERPRINT是否符合：
+				Certificate fingerprints:
+	      	MD5:  D8:B6:68:D4:6B:04:B9:5A:EB:34:23:54:B8:F3:97:8C
+   		   SHA1: BD:D9:0B:DA:AE:91:5F:33:C4:3D:10:E3:77:F0:45:09:4A:E8:A2:98
+		
+		Accept the patch signing certificate
+			/usr/j2se/bin/keytool -import -alias patchsigning -file /opt/SUNWppro/etc/certs/patchsigningcert.b64 -keystore /usr/j2se/jre/lib/security/cacerts
+			預設密碼為：changeit
+			檢查一下FINGERPRINT是否符合：
+				Certificate fingerprints:
+		      MD5:  6F:63:51:C4:3D:92:C5:B9:A7:90:2F:FB:C0:68:66:16
+      	   SHA1: D0:8D:7B:2D:06:AF:1F:37:5C:0D:1B:A0:B3:CB:A0:2E:90:D6:45:0C
+			
+	設定路徑到.cshrc
+		setenv PATH "/opt/SUNWppro/bin:/usr/sadm/bin:${PATH}"
+		setenv MANPATH "/opt/SUNWppro/man:$MANPATH"
+
+	設定使用者帳號
+		pprosetup -u 使用者帳號											目前申請的是 miholee
+		echo 使用者密碼 > /opt/SUNWppro/lib/.sunsolvepw			目前申請的是 ntsut2003
+		註：此帳號是MySUN的帳號，不是SunSolve的帳號。雖然SunSolve有提供把MySun轉成SunSolve帳號，但是網頁一直出現錯誤500.暫時勿設定帳號/密碼。
+
+	設定伺服器，目前選擇美國
+		pprosetup -P https://americas.patchmanager.sun.com/patchmanager/
+
+	若要設代理伺服器
+		pprosetup -x your_proxy:your_proxy_port
+
+	設定要加入系統的Patch類別
+		pprosetup -i standard:singleuser:rebootafter:reconfigafter
+
+	設定排程下載時間（假設是星期日晚上11：00）
+		pprosetup -W 0 -s 23:00
+
+	下載指定的Patch
+		smpatch download -i patch-ID
+
+	安裝指定的Patch
+		smpatch add -i patch-ID
+
+	分析機器上需要什麼PATCHES
+		smpatch analyze
+
+	安裝分析完畢後需要安裝的PATCHES
+		smpatch update
+
+----------------------------------------------------------------------------------------------------
+
+* 安裝NIS後新增使用者方法
+
+	1. 決定使用者所在主機後，在該機器上以root身份執行admintool新增使用者。家目錄一樣在/export/home/*/$USER下。 （*號是怕還有一層以上目錄；$USER則是使用者名）
+
+	2. 將使用者名及所在家目錄的主機及路徑加入PC-1的/etc/yp/auto_home之內，格式看該檔案內容應該就知道了。
+
+	3. 使用者所在主機的/etc/passwd下此次新增的使用者都加入PC-1的/etc/yp/passwd內，並將家目錄改成/home/$USER （請把$USER換成使用者名）;使用者所在主機的/etc/shadow新增的使用者加入PC-1的/etc/yp/shadow。
+
+	4. 若要讓使用者登到所在主機時顯示出來的家目錄也是/home/$USER的話，則使用者所在主機的/etc/passwd之中的家目錄也要改成/home/$USER (強烈建議採用)
+
+	註：用NIS後，記得要用$HOME來找自己的家目錄，不要用絕對路徑。
+
+----------------------------------------------------------------------------------------------------
+
+* 原本可正常使用的目錄無法進入解決方法
+
+	這一次發生的狀況是：用share命令無法分享該目錄出去（以前可以），出現Operation not applicable訊息。cd或ls該目錄可能會出現Permission denied。
+
+	經過追查，該目錄在NIS伺服器的auto_direct檔案有設定分享，但是主機名稱打錯了。而且掛載點剛好等於該目錄絕對路徑。
+
+	解決方法：
+		先到NIS伺服器上關閉該分享，重新make。再到該目錄所在主機重新啟動/etc/init.d/autofs應該就可以了。
+
+----------------------------------------------------------------------------------------------------
+
+* 安裝 NIS 後變更密碼的問題
+
+	1. 在帳號所在主機執行 passwd
+		==> login 密碼及 NIS 密嗎都會一起更新
+
+	2. 不在帳號所在主機執行 passwd
+		==> login 密碼及 NIS 密嗎都會一起更新, 但是當使用者再度連入帳號所在主機時會強迫換密碼.
+
+	3. 使用 yppasswd 變更密碼
+		==> 只會影嚮到 NIS 密碼 
+
+----------------------------------------------------------------------------------------------------
+
+* 控制 XDMCP 連線範圍
+
+	1. mkdir -p /etc/dt/config
+
+	2. cp /usr/dt/config/Xaccess /etc/dt/config
+
+	3. 修改 /etc/dt/config/Xaccess （因為/usr/dt/config/Xaccess會在套件被更新時一起換掉）
+
+	4. 先將下列二列註解掉 （因為這兩列允許所有連線）
+
+*                      # grant service to all remote displays
+*               CHOOSER BROADCAST       #any indirect host can get a chooser
+
+	5. 假設我們要設定：
+
+		a. XDMCP direct 只能從 .ntust.edu.tw 連入則加上以下二列。驚嘆號是禁止的意思
+
+*.ntust.edu.tw
+!*
+
+		b. XDMCP indirect 只能從 .ntust.edu.tw 連入，則加上以下二列。
+
+*.ntust.edu.tw CHOOSER BROADCAST
+!* CHOOSER BROADCAST
+
+	6. 改完存檔後只要執行/usr/dt/bin/dtconfig -reset 重新載入設定即可。
+
+----------------------------------------------------------------------------------------------------
+
+* 顯示目前所有修補檔版次
+
+	showrev -p
+
+----------------------------------------------------------------------------------------------------
+
+* 用 passwd 修改密碼時出現 Permission denied
+
+	在 nis server 執行 rpc.yppasswdd -D /etc/yp -m
+
+	註: 依據 http://unix.derkeiler.com/Newsgroups/comp.sys.sun.admin/2003-07/0373.html 所言， 似乎是 Solaris 的 /usr/lib/netsvc/ypstart script 的 but
+	
+
+----------------------------------------------------------------------------------------------------

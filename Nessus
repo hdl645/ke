@@ -1,0 +1,35 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* Nessus 使用
+
+	+ 下載 libnasl-2.0.6a.tar.gz nessus-libraries-2.0.6a.tar.gz nessus-core-2.0.6a.tar.gz nessus-plugins-2.0.6a.tar.gz
+	+ tar xzvf nessus-libraries-2.0.6a.tar.gz -C /tmp
+		cd /tmp/nessus-libraries-2.0.6a
+		./configure
+		make all install
+	+ tar xzvf libnasl-2.0.6a.tar.gz -C /tmp
+		cd /tmp/libnasl-2.0.6a
+		./configure
+		make all install
+	+ tar xzvf nessus-core-2.0.6a.tar.gz -C /tmp
+		cd /tmp/nessus-core-2.0.6a
+		./configure
+		make all install
+	+ tar xzvf nessus-plugins-2.0.6a.tar.gz -C /tmp
+		cd /tmp/nessus-plugins-2.0.6a
+		./configure 
+		make all install
+	+ nessus-mkcert
+	+ 利用 nessus-adduser 新增使用者, 使用 pass(密碼)驗證 (目前使用者為 scan, 密碼為 quake3586)
+	+ 執行 nessusd -D 開始服務
+	+ 將網路卡的 Promiscuous mode 打開, 方法如下(假設要開啟eth0的Promiscuous mode):
+		方法1: ifconfig eth0 promisc (關閉Promiscuous mode則是執行ifconfig eth0 -promisc)
+		方法2: 執行 arpwatch 亦可
+	+ 執行 nessus 填入要連入的 Nessus 伺服器(有執行上述 daemon 程式)
+	+ 若 Plugins 中有啟動 Denied of service 則有讓伺服器當機的可能.
+	+ 若要測試pop2, pop3, imap等會不會buffer overflow則要在 pref頁填入正確的登入密碼
+
+	註: 建議把 LANG 設成 en_US 才不會看不到錯誤訊息.
+
+----------------------------------------------------------------------------------------------------

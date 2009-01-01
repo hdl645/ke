@@ -1,0 +1,23 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* Synopsys 安裝
+
+tar xzvf cic.tgz -C /cadtools/synopsys_2002_05/
+tar xzvf synthesis.tgz -C /cadtools/synopsys_2002_05/
+tar xzvf sold.tgz -C /cadtools/synopsys_2002_05/
+tar xzvf formality.tgz -C /cadtools/synopsys_2002_05/
+tar xzvf tmax.tgz -C /cadtools/synopsys_2002_05/
+tar xzvf vcs.tgz -C /cadtools/synopsys_2002_05/
+tar xzvf fc2.tgz -C /cadtools/synopsys_2002_05/
+tar xzvf vera.tgz -C /cadtools/synopsys_2002_05/
+tar xzvf ccss.tgz -C /cadtools/synopsys_2002_05/
+tar xzvf primetime.tgz -C /cadtools/synopsys_2002_05/
+unlink /usr/synopsys
+ln -s /cadtools/synopsys_2002_05 /usr/synopsys
+
+修改 /usr/synopsys/CICuser_setup/license.csh, 把 26585@servername 中的 servername 改成 lsntu.
+
+記得在 .cshrc 內 source 適當的 csh, 如: source /usr/synopsys/CICuser_setup/synthesis.csh  請參考該目錄內的 00.README
+
+----------------------------------------------------------------------------------------------------

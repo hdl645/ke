@@ -1,0 +1,12 @@
+vim:ts=4:tw=0:enc=utf8
+--------------------------------------------------------------------------------
+* 剪輯 Ogg Vorbis 編碼的 avi 
+
+	1. 用 VirtualDUB MOD 將聲音抽取 (DeMux) 成 .ogg 檔案， 並在 Video 內選擇 Direct Stream copy 將整個 avi 的 video 部份另存成新的 .avi(無聲音)
+	2. 用 Audio Conversion Wizard 將 .ogg 轉成 .wav
+	3. 用 VirtualDUB 打開步驟1建立的 avi 檔案， 並在 Audio 內選擇聲音來源為 WAV Source， 記得設定成 Full processing mode 並選擇適當的聲音壓縮方式
+	4. Video 部份看是要用 direct stream copy 還是 full processing mode 皆可
+	5. 開始剪輯
+	6. 另存新檔即可。
+
+--------------------------------------------------------------------------------

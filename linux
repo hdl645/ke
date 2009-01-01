@@ -1,0 +1,1886 @@
+vim:ts=4:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 把文字檔內的^M (CR)刪掉
+
+	方法1:
+		unalias ls
+		for f in `ls *.v` ; do 
+			cat $f | tr -d "\r" > test.v
+			mv test.v $f
+		done
+
+	方法2:
+		mv test.v test.v.backup
+		dos2unix -n test.v.backup test.v
+
+	註:某些版本的 dos2unix (如 linux 下版本) 只要指定要轉換的檔案即可. 不需自己手動做暫存檔.
+
+----------------------------------------------------------------------------------------------------
+
+* 修改X視窗的背景顏色
+
+	xsetroot -bg black -display 140.118.123.176:0.0
+
+----------------------------------------------------------------------------------------------------
+
+* QT 的環境變數
+
+	若系統已經安裝了qt3, 但是執行kde仍會出現亂碼, 可檢查一下 QTDIR 環境變數是否指向舊版的 qt. 
+
+----------------------------------------------------------------------------------------------------
+
+* 用gdm開多個x server
+
+	改 /etc/X11/gdm/gdm.conf, 
+	+ 在[servers]下加1=Terminal -depth 8 -ac vt4, -ac 是解除 Access Control; vt4 表示用 Ctrl + Alt + F4 可切換到該視窗.
+	+ 在[server-Terminal]下, 把 handled=false, 改成 handled=true; 不然不會有login畫面, 也不會有window manager.
+
+----------------------------------------------------------------------------------------------------
+
+* 設好預設的xhost
+	假設要改的是第0個display, 在/etc/X0.hosts內加入允許丟x視窗過來的電腦ip或FQDN即可, 或許必須要重新啟動 x window.
+
+----------------------------------------------------------------------------------------------------
+
+* 詭異的find
+
+	用find指定的搜尋路徑若是目錄的symbolic link, 則在link名字後一定要再加上斜線, find才會真的去找那個目錄; 若該路徑本身即為目錄則不管有沒有加斜線都可以用 ==> 乾脆都加算了 :)
+
+----------------------------------------------------------------------------------------------------
+
+* 重導的小陷阱
+	
+	已知 2>&1 可以將送到 stderr 的資料轉到 stdout。那麼，希望 stderr 及 stdout 都不要顯示出來，以下命令是否正確？
+
+	find / -name "foo-bar" 1>/dev/null 2>&1
+
+	答：是錯誤的，只有 stdout 會被重導到 /dev/null，stderr 還是會被重導到 stdout。下命令時必須注意順序。
+
+	find / -name "foo-bar" 2>&1 1>/dev/null 
+
+	這樣一來，stderr先被重導到 stdout，然後 stdout 再重導到 /dev/null。
+
+	
+----------------------------------------------------------------------------------------------------
+
+* 在 Linux 底下清掉 Routing table:
+
+	ip route flush cache 
+
+----------------------------------------------------------------------------------------------------
+
+* 系統有人login時, 自動寄信通知某人 (加到 /etc/profile)
+
+# When any user login to system, system will auto send mail to root
+NOW=`date +%Y%m%d:%H%M%S`
+LAST=`last $USER -5`
+echo "[$NOW]: From $HOSTNAME : this user $USER login..." > /tmp/userlogin.log
+echo "$LAST" >> /tmp/userlogin.log
+mail -s "Attention !! User Login~~" root,hdl < /tmp/userlogin.log
+rm -f /tmp/userlogin.log
+
+	疑問: 若使用者是用 csh 或 tcsh, 那這一招應該會失效吧.
+
+----------------------------------------------------------------------------------------------------
+
+* ext2 分割轉 ext3
+
+	tune2fs -j /dev/hdXX
+
+	註: tune2fs 不會破壞該分割原有資料, X 表硬碟代號及分割區號碼
+
+----------------------------------------------------------------------------------------------------
+
+* 刪除ftp目奇怪的檔案/目錄名
+
+請使用flashfxp這套軟體，連接到你的ftp後。
+對著你不想要又刪不掉的目錄，按下右鍵，選擇command，使用raw command 來執行以下動作。
+
+rnfr /{不合法的目錄名}/
+rnto /(合法的目錄名)/
+這是對付比較簡單的
+比較難的
+rnfr /{不合法的目錄名}/{一個空隔}/
+rnto /{合法的目錄名}/{一個空隔}/
+有的 pub ftp 比較奇怪
+rnfr ./{不合法的目錄名}/{一個空隔}/
+rnto ./不合法的目錄名/{一個空隔}/ <-"."加或不加都試試看
+如果要刪根目錄依此類推
+就差在那個 ".",你可以交叉試試看,注意權限要全開,
+不然你用 flashfxp 進去也刪不掉,不懂在問...
+
+取之網路，用之網路，
+現在我只剩下一個空白的東西，刪不掉。看看誰有辦法
+
+----------------------------------------------------------------------------------------------------
+
+* Linux 檔案權限的小陷阱及如何應用
+
+	參考自 http://www.hackinglinuxexposed.com/articles/20030417.html#footnote-2
+
+
+	 $ id
+	 uid=1000(doug) gid=1000(doug) groups=1000(doug),1001(web)
+
+	 $ ls -l foo.html
+	 -rw-r-----    1 www-data  web         9663 Oct  8 16:03 foo.html
+ 
+	doug 可讀取 foo.html。然而以下例子：
+
+	 $ id
+	 uid=1000(doug) gid=1000(doug) groups=1000(doug),1001(web)
+
+	 $ ls -l bar.html
+	 -rw----r--    1 www-data  web        19838 Sep 17  4:22 bar.html
+ 
+	大部份人會以為 doug 可以讀取 bar.html，但是事實上卻不是。因為 KERNEL 並不會檢查權限屬性所有的可能性，而是找最適合者。規則如下：
+
+   1. 若使用者是檔案的擁有人，檢查是否有讀取屬性（400），若沒有則不再測試。
+
+   2. 若使用者是檔案所屬群組成員，檢查是否有讀取屬性（040），若沒有則不再測試。
+
+	3. 若使用者不是檔案擁有者或所屬群組的成員時，檢查其它人讀取屬性（004），若不行，則不再測試。
+	
+	因此，可以製造出一種檔案，是你所擁有的，而且可被同群組及其它人讀取，但是你自己不能讀。[1]
+
+We are frequently put in a position where we want to give only certain users access to a directory or files. We put them in a special group, and tailor the group permissions of the files/directories to allow them this special access. Say we wanted to have the compiler only available to developers, we may do the following:
+
+  # ls -l /usr/bin/gcc
+  -rwxr-xr-x    1 root     root        74088 Sep 23 15:13 /usr/bin/gcc
+
+  # addgroup devel
+  # chgrp devel /usr/bin/gcc
+  # ls -l /usr/bin/gcc
+  -rwxr-xr-x    1 root     devel       74088 Sep 23 15:13 /usr/bin/gcc
+
+  # chmod o-rx /usr/bin/gcc
+  # ls -l /usr/bin/gcc
+  -rwxr-x---    1 root     devel       74088 Sep 23 15:13 /usr/bin/gcc
+
+Now only root and the users in the devel group can run gcc. This is the kind of group modifications we most frequently make. But what happens if we want to have almost everyone able to use gcc except for a few troublemakers? We can add everyone to this group, but that's a management pain. But remember - the kernel only checks the best match from user/group/other, not all of them. So instead, we do things the other way around:
+
+  # ls -l /usr/bin/gcc
+  -rwxr-xr-x    1 root     root        74088 Sep 23 15:13 /usr/bin/gcc
+
+  # addgroup jerks
+  # chgrp jerks /usr/bin/gcc
+  # ls -l /usr/bin/gcc
+  -rwxr-xr-x    1 root     jerks       74088 Sep 23 15:13 /usr/bin/gcc
+
+  # chmod g-rx /usr/bin/gcc
+  # ls -l /usr/bin/gcc
+  -rwx---r-x    1 root     jerks       74088 Sep 23 15:13 /usr/bin/gcc
+
+What do we have now? gcc can only be run by root, and anyone not in the group jerks. We can maintain the (hopefully short) list of jerks much more easily than adding everyone to the devel group. The management nightmare is over.
+
+Next week we'll cover the finer points of directory permissions, after which we'll get back to more interesting aspects of Linux Security.
+
+NOTES:
+
+[1] Of course, if the file isn't an executable program, shell script, or other recognisable form, Linux will stick it's tongue out at you.
+
+[2] Even compiled executables can often be run without the execute bit, such as using /lib/ld-linux.so.2 program_name. You loose the ability to run setuid/setgid programs with their extra permissions if you use any of these methods.
+
+[3] Of course you could always chmod it since you own it.
+
+Brian Hatch is Chief Hacker at Onsight, Inc and author of Hacking Linux Exposed and Building Linux VPNs. Several years ago he ran "chown bree /dev/heart" and has been happy ever since. Brian can be reached at brian@hackinglinuxexposed.com.
+
+Copyright Brian Hatch, 2003
+
+This is the April 17, 2003 issue of the Linux Security: Tips, Tricks, and Hackery newsletter. If you wish to subscribe, visit http://lists.onsight.com/ or send email to Linux_Security-request@lists.onsight.com.
+
+----------------------------------------------------------------------------------------------------
+
+* 害死人的sleep()
+
+	在撰寫使用SIGALRM訊號的程式時，signal handler只會處理一次。可是kernel本身明明已經不用一直重設signal handler位址，而且sa_flags也沒有指定SA_ONESHOT。經過長期的DEBUG後，終於發現罪魁禍首了。因為我的程式設好handler之後就用sleep(50);做延遲，但是第一次SIGALRM被觸發時，sleep()也會收到，因此它就以為時間已經到了，就結束函式本身了。
+
+----------------------------------------------------------------------------------------------------
+
+* Russel King 提供的自動設定 getty 要監視哪幾個 Serial Port
+
+Just a thought - ramdisk tty port autoconfiguration
+
+/etc/rc.d/rc.local:
+
+SERDEV=ttyS
+for dev in ttyFB ttySA ttyS; do
+  grep -q $dev\$ /proc/devices && SERDEV=/dev/$dev
+  done
+echo Using $SERDEV for consoles
+sed s,@DEV@,$SERDEV, /etc/inittab.base >/etc/inittab
+/sbin/telinit Q
+
+and in inittab.base, have:
+
+# Example how to put a getty on a serial line (for a terminal)
+#
+T0:12345:respawn:/sbin/getty -L @DEV@0 38400 vt100
+#T1:23:respawn:/sbin/getty -L @DEV@1 115200 vt100
+
+----------------------------------------------------------------------------------------------------
+
+* sudo 的使用法:
+
+	+ 在 /etc/sudoers 中指定哪些使用者可以在哪些機器執行哪些命令.
+	+ 不建議使用普通文書編輯程式, 最好用 visudo 來改, 可以檢查文法錯誤
+	+ 參考資料 man sudoers, http://www.chu.edu.tw/~jerry/chnc/unix/freebsd/student/f_gcc/Sudo.htm
+
+	例: 希望 hdl 可以執行 /sbin/ifconfig, /bin/mount, /bin/umount
+
+	1. 先定義可以給 hdl 執行的命令, 以便後面步驟較方便
+		Cmnd_Alias HDL_CMD=/sbin/ifconfig,/bin/mount,/bin/umount
+
+	2. 再指定 hdl 可以在哪些機器上執行指定命令, 不需輸入 hdl 的密碼即可使用
+		hdl     ALL=NOPASSWD:HDL_CMD
+	
+	3. 存檔離開, 以後 hdl 要執行 ifconfig, mount, umount 先輸入 sudo 後方再輸入要用的命令及參數即可.
+
+----------------------------------------------------------------------------------------------------
+
+* strace 命令
+
+	The strace program intercepts and records the system calls called and received by a running process. Strace can print a record of each system call, its arguments and its return value.
+
+	Example: 假設 bash 是我們要追蹤的程式
+
+		strace bash
+
+		strace -c bash 每一個 system call 被執行的次數 (記得執行 exit 離開)
+
+		strace -t bash 每一個 system call 被執行時的時間
+
+		strace -T bash 計算每一個 system call 執行所需時間
+
+	詳見 man strace
+
+----------------------------------------------------------------------------------------------------
+
+* 一個 process 要怎樣偵測出自己是否在背景狀態執行?
+
+	摘自 http://www.csie.nctu.edu.tw/document/unixfaq/node32.html
+
+首先,您是否想知道您自己是在背景狀態下執行，或者在交談狀態下執行？如果 您只是想藉此決定是否該在終端機上印出提示符號之類的訊息，那麼更合適的做 法應該是檢查您的標準輸入是否為終端機:
+
+sh: if [ -t 0 ]; then ... fi C: if(isatty(0)) ...
+
+一般來說，您無法得知自己是否在背景狀態下執行。問題的根本在於不同的 shell 與不同的 UNIX 版本對於「前景」與「背景」的定義可能有所不同。而且在最 常見的系統上，前景與背景都有較好的定義，程式甚至可以在背景與前景之間任 意切換！
+
+在沒有 job control 的 UNIX系統上，若要把 process 放入背景狀態通常是把  SIGINT 與 SIGQUIT 忽略掉，並且把標準輸入轉為 "/dev/null"，這是由  shell處理的。
+
+在具有 job control 功能的 UNIX 系統，若shell支援 job control 功能，那麼shell 只要把 process group ID 設成跟 terminal 所屬的 PGID 不同即可把 process 切 換至背景狀態；如果要把 process 切回前景狀態，只要把此 process 的 PGID 設 成跟目前 terminal 所屬的 PGID 即可。如果 shell 不支援 job control 功能，則 不管UNIX 系統是否支援 job control 的功能，shell 對 process 的處理動作都 是一樣的（也就是忽略SIGINT 與 SIGQUIT，並且把標準輸入轉為"/dev/null"）。 
+
+----------------------------------------------------------------------------------------------------
+
+* 找尋說明資料的途徑
+
+	+ man page
+		man 指令或函式
+		pinfo -m 指令或函式
+	+ info page (GNU 開發的軟體最好是看這個, 比 man page 易懂.)
+		info 指令
+		pinfo 指令 (建議用這個, 較 info 好操作)
+	+ /usr/doc/軟體套件名稱 或 /usr/share/doc/軟體套件名稱
+		通常可以找到套件的說明文件
+	+ Linux Documentation Project
+		在 Google 找尋 Linux Documentation Project 即可.
+
+----------------------------------------------------------------------------------------------------
+
+* 如何利用ifconfig開啟/關閉網路卡的Promiscuous mode
+
+	開啟： ifconfig eth0 promisc
+	關閉： ifconfig eth0 -promisc
+
+
+----------------------------------------------------------------------------------------------------
+
+* lsof
+
+	列出開啟的檔案
+
+	例：
+		/usr/sbin/lsof
+
+----------------------------------------------------------------------------------------------------
+
+* pidof 
+
+	列出目前執行中被指定的程式的PID
+
+	例： 
+		/sbin/pidof bash
+
+----------------------------------------------------------------------------------------------------
+
+* 如何將某 web page 下所有連結檔案下次抓下
+
+	wget -m http://firefly.idv.tw/setfont-xft/RedHat/9.0/RPMS/
+
+----------------------------------------------------------------------------------------------------
+
+* 下載及安裝 Microsoft 中日韓字型
+
+對於沒有安裝中文 Windows 9x 或 Windows 2k/XP 的朋友，若想在 Linux 下合法下載和安裝 Microsoft 的 細明體 (MingLiu) 或其他中日韓字型，你可按以下部驟在 Linux 上進行安裝：
+
+1. 到 Microsoft 的 Global IME for IE 下載網址，下載你要使用亞洲語言的輸入法，請注意是指定下載附有 Language pack 的那些選項:
+
+http://www.microsoft.com/windows/ie/downloads/recommended/ime/install.asp
+
+Microsoft Global IME 5.02 for Chinese (Simplified) - with Language Pack
+Microsoft Global IME 5.02 for Chinese (Traditional) - with Language Pack
+Microsoft Global IME 5.02 for Japanese - with Language Pack
+Microsoft Global IME 5.02 for Korean - with Language Pack
+
+2. 下載 cabextract package，這是用來在 Linux 下解壓 Microsoft format (包括 *.cab 和某些 exe) 的檔案。
+
+http://www.rpmfind.net/linux/rpm2html/search.php?query=cabextract
+http://www.kyz.uklinux.net/cabextract.php3
+
+3. 安裝 cabextract 的 rpm package，之後啟動 console/terminal，並進入你在 部驟 #1 下載了檔案的目錄中 (下載的檔案應是 *.exe)，檢查並把他們進行解壓，例如我把檔案下載在 /home/user/Documents/fonts 目錄中 (~/Documents/fonts)：
+
+cd /home/user/Documents/fonts
+cabextract -l *.exe (<-- 顯示檢查包含在該壓縮檔中的內容)
+cabextract *.exe (<-- 進行解壓)
+
+4. 搜尋所有 *.ttf 的字型檔案，並把它們安裝，有兩個方法：
+
+4.1 簡單安裝 (只適用於裝有 Xf2/fontconfig-2.0 以上的系統，如 RH 8.0/9.0 和 Mandrake 9.1，而且只能供該 login account 使用）
+
+在 家目錄 (Home directory) 中建立一個 .fonts 的目錄（注意要有一點），並把以上 *.ttf 檔放進去，例如：
+
+mkdir ~/.fonts
+cp /home/user/Documents/fonts/*.ttf ~/.fonts
+
+這樣，支援 Xft2/fontconfig 的大部份軟件就能找到它們。
+
+4.2 徹底安裝 (正式設定為系統字型，並能讓其他 登入的用者 使用）
+
+在 /usr/share/fonts/ 或 /usr/X11R6/lib/X11/fonts 中建立一個目錄，例如名為 msimefonts，接著同樣把所有 *.ttf 抄進該目錄中（以下以 /usr/share/fonts/ 作為例子)。
+
+su
+cd /usr/share/fonts/
+
+mkdir msimefonts
+cd msimefonts
+
+cp /home/user/Documents/fonts/*.ttf .
+
+接著要使系統辨認新的字型：
+
+ttmkfdir -o fonts.scale
+mkfontdir
+
+註：ttmkfdir 對 Microsoft 的亞洲字型 ttf 檔有效，但對別的亞洲字型則說不定。詳細情形請看參看 螢火飛學姐的 xttmgr 字型管理程式一文。
+
+最後，使用 fontconfig-2.0+ 的系統要進行以下指令告訴系統新字型的安裝：
+
+fc-cache -v -f
+
+而較舊的 distribution 和 Open Office 1.0.x 都未有使用 fontconfig-2.0，你就要手動修改 /etc/X11/fs/config 告訴系統新增的 font path，或執行 chkfontpath 來達致相同目的：
+
+/usr/sbin/chkfontpath -a /usr/share/fonts/msimefonts
+
+5. 若你使用徹底安裝，你可檢查 Microsoft 的亞洲字型是否安裝成功：
+
+xlsfonts | grep ms
+xlsfonts | grep dyna
+
+在 Mozilla 裡你應發現 Traditional Chinese 多了 MingLiu 的字體選擇，用這字體瀏灠網頁倒是不錯。
+
+其實，Corefonts project 也是使用相同原理來安裝 Microsoft 的免費英文字型。你也可以安裝該套英文字型到你的 Linux 系統上。最重要的，是使用以上方法 你並不需要有 Windows license 或購買 Windows 也能合法地使用那些字型。
+
+----------------------------------------------------------------------------------------------------
+
+* 自行呼叫crypt()產生像shadow檔內加密過的密碼
+
+	PASSWORD=密碼寫在這兒 perl -e 'srand ; @salt=(a..z,A..Z,0..9); \
+	print crypt($ENV{PASSWORD}, $salt[rand(62)].$salt[rand(62)]), "\n";'
+
+----------------------------------------------------------------------------------------------------
+
+* 執行rpm會卡住的解決方案
+
+  執行 rpm -qa 看看是不是也如此，就是如此表示有程式存取 rpm db，
+  你可以執行 fuser -k /var/lib/rpm/* 即可。
+  然後順便刪除暫存的 rpm db 檔案。
+  rm -f /var/lib/rpm/__*
+
+----------------------------------------------------------------------------------------------------
+
+* 輸入命令, 超過畫面範圍時不會自動換列
+
+	經過長期使用發現, 有很多終端若把畫面放大後會發現如上述的問題. 另外, 還有複製貼上到別的視窗會發生自動向右縮排的現象.
+
+	建議重新 source /etc/bashrc, 若還是不能解決(假設使用 gnome-terminal), 建議把畫面放大後再開新視窗來執行.
+
+
+----------------------------------------------------------------------------------------------------
+
+* 寫程式時清除螢幕的方法
+
+	可以試著用printf()把 ESC[2J 送到螢幕, 如下所示:
+
+	printf("[2J"); 或
+	printf("\x01b[2J"); 或
+	printf("\o033[2J");
+
+	在 vi 中要輸入 ESC 可以按下 Ctrl+V 再直接輸按下 ESC 即可
+
+	參考資料: http://www.cyut.edu.tw/%7Eckhung/b/mi/vt100_reference_card.txt
+
+----------------------------------------------------------------------------------------------------
+
+* RedHat 下網芳上印表機的設定
+
+	以 root 身份執行 redhat-config-printer-gui
+
+	若是用精靈從頭到尾產生應該是沒問題; 若是手動新增印表機則填寫格式如下:
+
+	Share: //140.118.123.180/HP_PRN
+	Server host or IP address: 不要填
+	Workgroup: Lab810-2
+	Username: Administrator
+	Password: 這個就不用公佈了
+
+	記得勾選 Linefeed translation
+
+	再到 Driver Option 把 Page size 改成 A4
+
+	
+
+----------------------------------------------------------------------------------------------------
+
+* rpm 查詢指令
+
+	rpm -qc 套件名	==> 查詢該套件的組態檔(configuration files)
+	rpm -qd 套件名	==> 查詢該套件提供的文件檔(documentation)
+	rpm -qf 檔案名	==> 反查該檔案屬於什麼套件
+	rpm -q 套件名 --whatrequires	==> 查詢安裝此套件前需安裝什麼套件
+	rpm -q 套件名 --whatprovies		==> 查詢此套件之內提供什麼套件 (Q: 會有一個rpm檔內有兩個以上套件嗎?)
+
+----------------------------------------------------------------------------------------------------
+
+* tftp server 使用時注意事項
+
+	在 /tftpboot 目錄內似乎不能使用 Symbolic link, 不然會抓到 symbolic link 本身(用dbpxa250測試時遇到的)
+
+----------------------------------------------------------------------------------------------------
+
+* RedHat 的 man-pages 無法顯示
+
+	在寫作業時發現若要查詢的 man page 被gzip壓縮過, 則 redhat 的設定無法正常顯示該 man page. 如: getrusage, fflush
+
+	目前解決方法是將 slackware /usr/lib/man.conf 複製到 redhat /etc/man.config 
+
+	slackware 的 man.conf 檔案內容如下:
+
+#
+# Generated automatically from man.conf.in by the
+# configure script.
+#
+# man.conf from man-1.5h
+#
+# This file is read by man to configure the default manpath (also used
+# when MANPATH contains an empty substring), to find out where the cat
+# pages corresponding to given man pages should be stored,
+# and to map each PATH element to a manpath element.
+# It may also record the pathname of the man binary. [This is unused.]
+# The format is:
+#
+# MANBIN		pathname
+# MANPATH		manpath_element	[corresponding_catdir]
+# MANPATH_MAP		path_element	manpath_element
+#
+# If no catdir is given, it is assumed to be equal to the mandir
+# (so that this dir has both man1 etc. and cat1 etc. subdirs).
+# This is the traditional Unix setup.
+# Certain versions of the FSSTND recommend putting formatted versions
+# of /usr/.../man/manx/page.x into /var/catman/.../catx/page.x.
+# The keyword FSSTND will cause this behaviour.
+# Certain versions of the FHS recommend putting formatted versions of
+# /usr/.../share/man/[locale/]manx/page.x into
+# /var/cache/man/.../[locale/]catx/page.x.
+# The keyword FHS will cause this behaviour (and overrides FSSTND).
+# Explicitly given catdirs override.
+#
+# FSSTND
+# FHS
+#
+# This file is also read by man in order to find how to call nroff, less, etc.,
+# and to determine the correspondence between extensions and decompressors.
+#
+# MANBIN		/usr/local/bin/man
+#
+# Every automatically generated MANPATH includes these fields
+#
+MANPATH	/usr/man
+MANPATH	/usr/local/man
+MANPATH	/usr/X11R6/man
+MANPATH /usr/lib/perl5/man
+#
+# Set up PATH to MANPATH mapping
+#
+# (these mappings are superfluous when the right hand side is
+# in the mandatory manpath already, but will keep man from statting
+# lots of other nearby files and directories)
+#
+MANPATH_MAP	/bin			/usr/man
+MANPATH_MAP	/sbin			/usr/man
+MANPATH_MAP	/usr/bin		/usr/man
+MANPATH_MAP	/usr/sbin		/usr/man
+MANPATH_MAP	/usr/local/bin		/usr/local/man
+MANPATH_MAP	/usr/local/sbin		/usr/local/man
+MANPATH_MAP	/usr/X11R6/bin		/usr/X11R6/man
+MANPATH_MAP	/usr/bin/X11		/usr/X11R6/man
+MANPATH_MAP	/usr/bin/mh		/usr/man
+#
+# Useful paths - note that COL should not be defined when
+# NROFF is defined as "groff -Tascii" or "groff -Tlatin1";
+# not only is it superfluous, but it actually damages the output.
+#
+TROFF		/usr/bin/groff -S -Tps -mandoc
+NROFF		/usr/bin/groff -S -Tascii -mandoc
+EQN		/usr/bin/geqn -Tps
+NEQN		/usr/bin/geqn -Tascii
+TBL		/usr/bin/gtbl
+# COL		/usr/bin/col
+REFER		/usr/bin/grefer
+PIC		/usr/bin/gpic
+VGRIND		
+GRAP		
+PAGER		/usr/bin/less -is
+CAT		/bin/cat
+#
+# The command "man -a xyzzy" will show all man pages for xyzzy.
+# When CMP is defined man will try to avoid showing the same
+# text twice. (But compressed pages compare unequal.)
+#
+CMP		/usr/bin/cmp -s
+#
+# Compress cat pages
+#
+COMPRESS	/bin/gzip
+COMPRESS_EXT	.gz
+#
+# Default manual sections (and order) to search if -S is not specified
+# and the MANSECT environment variable is not set.
+#
+MANSECT		1:8:2:3:4:5:6:7:9:tcl:n:l:p:o
+#
+# Default options to use when man is invoked without options
+# This is mainly for the benefit of those that think -a should be the default
+# Note that some systems have /usr/man/allman, causing pages to be shown twice.
+#
+# @noall@MANDEFOPTIONS	-a
+#
+# Decompress with given decompressor when input file has given extension
+# The command given must act as a filter.
+#
+.gz		/bin/gunzip -c
+.bz2		/bin/bzip2 -c -d
+.z		
+.Z		/bin/zcat
+.F		
+.Y		
+
+----------------------------------------------------------------------------------------------------
+
+* 在 Linux 上下載及安裝 Microsoft 的中日韓字型  	
+
+文章來自：螢火蟲公園
+
+對於沒有安裝中文 Windows 9x 或 Windows 2k/XP 的朋友，若想在 Linux 下合法下載和安裝 Microsoft 的 細明體 (MingLiu) 或其他中日韓字型，你可按以下部驟在 Linux 上進行安裝：
+
+1. 到 Microsoft 的 Global IME for IE 下載網址，下載你要使用亞洲語言的輸入法，請注意是指定下載附有 Language pack 的那些選項:
+
+http://www.microsoft.com/windows/ie/downloads/recommended/ime/install.asp
+
+Microsoft Global IME 5.02 for Chinese (Simplified) - with Language Pack
+Microsoft Global IME 5.02 for Chinese (Traditional) - with Language Pack
+Microsoft Global IME 5.02 for Japanese - with Language Pack
+Microsoft Global IME 5.02 for Korean - with Language Pack
+
+2. 下載 cabextract package，這是用來在 Linux 下解壓 Microsoft format (包括 *.cab 和某些 exe) 的檔案。
+
+http://www.rpmfind.net/linux/rpm2html/search.php?query=cabextract
+http://www.kyz.uklinux.net/cabextract.php3
+
+3. 安裝 cabextract 的 rpm package，之後啟動 console/terminal，並進入你在 部驟 #1 下載了檔案的目錄中 (下載的檔案應是 *.exe)，檢查並把他們進行解壓，例如我把檔案下載在 /home/user/Documents/fonts 目錄中 (~/Documents/fonts)：
+
+cd /home/user/Documents/fonts
+cabextract -l *.exe (<-- 顯示檢查包含在該壓縮檔中的內容)
+cabextract *.exe (<-- 進行解壓)
+
+4. 搜尋所有 *.ttf 的字型檔案，並把它們安裝，有兩個方法：
+
+4.1 簡單安裝 (只適用於裝有 Xf2/fontconfig-2.0 以上的系統，如 RH 8.0/9.0 和 Mandrake 9.1，而且只能供該 login account 使用）
+
+在 家目錄 (Home directory) 中建立一個 .fonts 的目錄（注意要有一點），並把以上 *.ttf 檔放進去，例如：
+
+mkdir ~/.fonts
+cp /home/user/Documents/fonts/*.ttf ~/.fonts
+
+這樣，支援 Xft2/fontconfig 的大部份軟件就能找到它們。
+
+4.2 徹底安裝 (正式設定為系統字型，並能讓其他 登入的用者 使用）
+
+在 /usr/share/fonts/ 或 /usr/X11R6/lib/X11/fonts 中建立一個目錄，例如名為 msimefonts，接著同樣把所有 *.ttf 抄進該目錄中（以下以 /usr/share/fonts/ 作為例子)。
+
+su
+cd /usr/share/fonts/
+
+mkdir msimefonts
+cd msimefonts
+
+cp /home/user/Documents/fonts/*.ttf .
+
+接著要使系統辨認新的字型：
+
+ttmkfdir -o fonts.scale
+mkfontdir
+
+註：ttmkfdir 對 Microsoft 的亞洲字型 ttf 檔有效，但對別的亞洲字型則說不定。詳細情形請看參看 螢火飛學姐的 xttmgr 字型管理程式一文。
+
+最後，使用 fontconfig-2.0+ 的系統要進行以下指令告訴系統新字型的安裝：
+
+fc-cache -v -f
+
+而較舊的 distribution 和 Open Office 1.0.x 都未有使用 fontconfig-2.0，你就要手動修改 /etc/X11/fs/config 告訴系統新增的 font path，或執行 chkfontpath 來達致相同目的：
+
+/usr/sbin/chkfontpath -a /usr/share/fonts/msimefonts
+
+5. 若你使用徹底安裝，你可檢查 Microsoft 的亞洲字型是否安裝成功：
+
+xlsfonts | grep ms
+xlsfonts | grep dyna
+
+在 Mozilla 裡你應發現 Traditional Chinese 多了 MingLiu 的字體選擇，用這字體瀏灠網頁倒是不錯。
+
+其實，Corefonts project 也是使用相同原理來安裝 Microsoft 的免費英文字型。你也可以安裝該套英文字型到你的 Linux 系統上。最重要的，是使用以上方法 你並不需要有 Windows license 或購買 Windows 也能合法地使用那些字型。
+
+
+----------------------------------------------------------------------------------------------------
+
+* AV editing tools
+
+hello，學園中的朋友，今天小弟想要來分享一下弟在 Debian 上常用的 AV editiong tools。
+
+各位朋友應該有看過小弟之前不斷地宣傳用 transcode 來處理media file吧，如果不清楚的朋友，可以參考此篇
+
+http://moto.debian.org.tw/viewtopic.php?t=742
+
+而我想閱讀完此篇之後，可能會想要扁我吧，因為想要壓個avi檔案還要用一堆指令，看完就昏頭了，更何況 還要去操作這個 transcode，是的，可以罵小弟的不是，因為當時弟昏頭了好幾次，所以想分享出來害人...
+
+...今天就是特地來道歉的，所以另外發表一篇，也是小弟在 Debian 上最常在使用的影片壓縮以及剪輯，所介紹的皆是 gui tool，而底層的tools 當然是強大的 transcode摟...
+
+以下會介紹五套軟體，這樣應該夠賠罪了吧...
+
+# for DVD transcode
+dvd::rip
+acidrip
+
+# 對一般影片檔案的轉換
+gtranscode
+
+# 有電視卡的朋友注意了，這一套可是相當方便的電視錄影軟體窩
+gv4l
+
+# avi 切割工具
+avidemux
+
+dvd::rip
+強大的dvd rip tools，功能相當複雜，但幾乎把transcode的功能都實作出來，也有支援字幕的render或是產生.sub字幕檔案。
+
+此套還將transcode中的cluster mode以gui介面實作出來，方便朋友們設定(ps：transcode的cluster mode覺得不夠漂亮，只是檔案切成好幾份給幾台電腦壓縮而已)
+
+一些 screenshot以及圖文說明可以在此看到
+http://www.exit1.org/dvdrip/doc/gui.cipp
+
+acidrip
+這一套就比較"簡單"，注意窩，可不陽春呢，他是利用mencoder來做底層轉檔tool，而使用上相當方便，也有字幕的支援，比dvdrip方便使用，滿推薦改用這一套。
+
+
+
+gtranscode
+以上兩個都是在做dvd轉檔的，但不吃一般mpeg or avi檔案，所以這次改介紹這一套，支援一般轉檔功能，基本上transcode能轉的，他就有實作出來，所以只是做一般轉檔的朋友，可以考慮這一個。
+
+
+
+
+gv4l
+video for linux using gtk2，有在使用電視卡的朋友，在Linux上應該很少找到friendly的tool來錄影吧，用xawtv錄起來不夠漂亮，mencoder要打一堆參數，節目都快做完了卻還在打參數...
+
+所以改用這一套吧，此軟體是用 transcode 當底層tool，而我們只要設定video card路徑以及預錄的格式，其他的都交給電腦吧...反正小弟懶...
+
+可以看一下使用畫面：
+
+
+
+
+avidemux
+這一套是切割影像檔案的軟體，滿方便操作的，至少不用打命令加時間的方式，用滑鼠按一按就可以切割檔案了，但這一套似乎只吃avi檔案，用其他的mpeg雖然可以讀，但卻會出trouble，現在有新版了，不知道是否更完整。
+
+
+
+
+以上的軟體除了gv4l之外，都可以在marillat的port找到，只要將你的sources.list中加入：
+
+代碼:
+deb http://marillat.free.fr/ unstable main
+
+
+然後就可以apt-get install了，而gv4l小弟正在製作deb檔案，做好了會上傳到
+
+http://freenix.iis.sinica.edu.tw/~moto/sid/這邊的。
+
+貼圖貼累了，下去睡覺... 
+
+
+----------------------------------------------------------------------------------------------------
+
+* 多台電腦共用MOUSE及KEYBOARD
+
+最近又找到一個好玩的小工具, 在同時有二組 pc (二台主機和二台螢幕,
+是沒有二台的限制, 多台也可以)的狀況下,共用一隻滑鼠和一個鍵盤。由於有支援 X 和
+Windows, 因此可以一台是 linux 而另一台是Windows 的機器, 還可在 pc 間 copy &
+paste, 滿好用的。怛也必須在 X 中才行, console 是無法使用的。
+
+在 X 下必須有 XTEST 的支援, 一般我們安裝好大概都會支援了, 可用以下指令檢查:
+bash-2.05b$ xdpyinfo |grep XTEST
+XTEST
+
+本程式內定是用 tcp port 24800, 可以自行修改。如果有開 iptables 記得別擋掉了。
+
+原始網頁在 http://synergy2.sourceforge.net
+
+首先安裝起來
+apt-get install synergy
+
+bash-2.05b$ dpkg --listfiles synergy|grep bin
+/usr/bin
+/usr/bin/synergyc
+/usr/bin/synergys
+裡面有二個 binary, synergys 為 server, synergyc 為 client 端。
+
+現在 synergy 最新的版本為 1.0.8, 但在 debian 的 sid 中, 目前的版本是 1.0.3-1,
+如果機器都是 debian 當然沒問題,但若是有 Windows 的機器, 就只能用 windows 當
+server, 而 debian 只能當 client,如果一定要用 debian 當 server, 請抓和 windows
+版本一樣的回來裝, 或是下載以下的 deb 檔回去安裝。
+ftp://203.69.36.189:4009/synergy_1.0.8-1_i386.deb
+
+cp /usr/share/doc/synergy/examples/synergy.conf ~/.synergy.conf
+
+修改 ~/.synergy.conf 符合您的需求。
+
+# sample synergy configuration file
+# comments begin with the # character and continue to the end of
+# line. comments may appear anywhere the syntax permits.
+# 這個例子中, 有三台電腦要共用 mouse and keyboard, 假設這台是 moe, 當 server,
+# 另外二台 larry and curly 則為 client。
+
+section: screens
+moe:
+larry:
+curly:
+end
+
+# 而各電腦間是如何來排列的呢 ?
+section: links
+# larry is to the right of moe and curly is above moe
+# moe 往右為 larry
+# moe 往上為 curly
+moe:
+right = larry
+up = curly
+
+# moe is to the left of larry and curly is above larry.
+# note that curly is above both moe and larry and moe
+# and larry have a symmetric connection (they′re in
+# opposite directions of each other).
+# larry 往左為 moe
+# larry 往上為 curly
+larry:
+left = moe
+up = curly
+
+# larry is below curly. if you move up from moe and then
+# down, you′ll end up on larry.
+# larry 往下為 curly
+# 如果此時由 moe 移向上方會跑到 curly, 再往下移動則會移到 larry
+curly:
+down = larry
+end
+
+section: aliases
+# curly is also known as curly.example.domain.org
+# 設定機器的別名
+curly:
+curly.example.domain.org
+larry:
+larry.example.domain.org
+end
+
+接著執行 synergys, 會將 synergys 變成 daemon 的方式在背景執行。
+若要放在前景執行以方便 debug, 請下:
+synergys -f
+or
+synergys --no-daemon
+
+在 client 方面則下 synergyc hostname:port 即可。
+synergyc moe
+
+此時如果由 moe 移動滑鼠到螢幕的上方, 過了邊緣後, 滑鼠的游標就會從curly 的下方出現, 現在如果從鍵盤敲按鍵, 就是輸入到 curly 中了。總之,鍵盤是跟著滑鼠的腳步走的。
+
+有一點要注意的, 就是如果你的 window manager 有開啟將滑鼠移到視窗邊緣會切換到下個虛擬桌面功能的話, synergy 將可能無法正常運作, 請改用熱鍵切換。
+
+內定 ctrl+alt+del 是沒作用的, 需要的話, please RTFM。
+
+在 scroll lock 的狀態下, synergy 是無法正常運作的。
+
+另外, 如果各位沒有二台電腦和螢幕好試的話, 以下的設定檔為自己玩的方式
+將滑鼠移到右邊會從左邊出來, 移到左邊則從右邊跑出來, 試試看。
+
+section: screens
+eagle:
+end
+
+section: links
+eagle:
+right = eagle
+left = eagle
+end
+
+section: aliases
+eagle:
+eagle.example.domain.org
+end
+
+
+這裡只解說 X 下如何設定, 至於 windows 端如何設定, 請各位自己來了。
+
+
+----------------------------------------------------------------------------------------------------
+
+* log 分析軟體
+
+因為 log 實在太多，所以就搜索了一些 log 檔案的資料，所以找到了一個 log 分析的套件
+logcheck，這個套件可以自動定時分析 log 檔，並將可能會影響系統安全或系統的錯誤訊息 mail 給 root，所以我就發現問題，推薦大家安裝這個套件。
+#apt-get install logcheck
+
+看了 logcheck 檔案後，發現裡面的錯誤訊息是「切換為 SSH1 相容失敗」，原來是 putty 裡面可以預設先使用 SSH1 再使用 SSH2 ，強制設定為使用 SSH2 就可以正常連線了。 另外， SSH2 預設的 port 是 2222 ，不是標準的 22。 port 的設定，可以編輯
+/etc/ssh2/sshd2_config 裡面的
+Port 2222
+
+
+安裝完 SSH2 後，連 ftp 都可以經過 ssh2 加密，我是在 Windows 使用 CuteFtp pro 2.0
+，裡面的站台設定可以使用 SFTP 使用 SSH2(安全外層) ...
+
+提供大家參考～
+ps:安裝完 SSH2 就可以把 Telnet 服務拿掉，這樣比較安全～
+
+
+----------------------------------------------------------------------------------------------------
+
+* 拍下LINUX TTY畫面
+
+原來在Linux下拍下tty畫面也很簡單
+
+我預設的畫面是25X80
+
+dd if=/dev/vcs1 of=capture_filename bs=2000 count=1
+
+vi capture_filename 即可看到剛才tty1上的螢幕內容
+
+如果是
+dd if=/dev/vcsa1 of=capture_filename bs=4004 count=1
+
+vi capture_filename 可看到剛才tty1上的螢幕內容及色彩編碼
+結構是
+前四個字元值 列數 每列字元數 游標位置列 游標水平位置
+後面則是色彩字元前文字字元後的雙字元結構
+
+只要 cat capture_filename > /dev/vcsa3
+
+就可把剛才抓下的畫面秀在tty3上面，好玩吧！
+
+可以輕易存下全螢幕文字畫面。
+
+
+----------------------------------------------------------------------------------------------------
+
+* 使用 less 時不要去掉顏色
+
+	以 ls 為例
+
+	ls --color=always | less -r 
+
+----------------------------------------------------------------------------------------------------
+
+* 魔獸三伺服器架設
+
+發信人: tomex.bbs@bbs.cs.nccu.edu.tw (tomex), 看板: Linux
+標 題: 如何架設Linux版魔獸三地下遊戲伺服器？
+發信站: 政大資科貓空行館 (Wed Apr 23 17:55:42 2003)
+轉信站: SayYa!ctu-reader!ctu-peer!news.nctu!news.cis.nctu!smallcatBBS
+
+如何架設魔獸三地下遊戲伺服器？
+===============================
+
+魔獸3前言
+----------
+猶記得魔獸三(以下簡稱War3)遊戲剛上市時，加入了英雄(Hero)角色，玩家們會覺得比War2複雜許多!
+首先是猶豫該選哪一個種族(在War2時代獸人總是比人類強)，再來是挑選英雄角色，而且電腦人工智慧
+變得很強，初玩者常常一下子被電腦打死，使得原本特色為簡單、重策略的魔獸遊戲，變得索然無味!
+
+後來War3陸續有了方便的硬碟版(免光碟)，而且台灣也出現魔獸三伺服器(著名的有豬頭C、天空之城)
+它們提供優良的連線環境及Patch升級說明，豬頭C常常每晚站上人數千餘人以上。我再次拾起勇氣，玩
+一些特殊的地圖，例如最簡單的蓋砲臺防衛戰(Tower Defense,TD)，讓我覺得War3變簡單了些! 後來又
+玩了AoS地圖，玩者只要操縱一個英雄角色，殺敵賺錢升級，非常簡單! 我常和朋友組隊挑戰網友，這
+樣簡單易上手的地圖陸續有類似的版本，例如3C,Dota等等都是。
+
+經由AoS地圖與網友的拉距戰，我變得善玩各種族的某英雄，也慢慢了解War3的趣味，有時再回來玩傳統
+的升級戰，一切都變得好簡單! 每晚和網友互相叫囂對戰，成了最大的樂趣! 總之，War3的虛擬社群經
+由這些地下伺服器逐漸形成。透過地下Battle.Net，我也終於能了解為何「天堂」會那麼流行...
+
+
+伺服器軟體
+-----------
+當你連進去地下War3伺服站，你會發現整個介面很親切，相對地架站軟體看似好專業複雜。我開始利用
+Google來研究其伺服軟體PvPGN安裝，當時的版本是1.4.1，它是由歐洲人發展的一套GPL授權軟體，用
+來模擬Blizzard的BattleNet網站。PvPGN是Player -vs- Player Gaming Network的縮寫，相關歷史發展
+請參考http://www.pvpgn.org/的FAQs部分。
+
+這個官方網站提供一個論壇來討論Blizzard官方的變動情況，並隨時修正其PvPGN環境，找了很久才發現
+其軟體的下載處：http://pvpgn.mivabe.nl/#PvPGN，該網頁是所有參與的全球伺服器列表，而下載處是
+上方很不明顯的Release Info連結。我試過連上面最多人的歐洲站台，可惜從台灣這兒連不進去。
+
+當時，那兒可下載的v1.4.1只提供完整的Linux版本(Tarball)，對於我這種只會用RPM安裝的玩家，勉強
+看一下旁邊依然很不明顯的How to說明文件，結果大出我意料之外，安裝真是太簡單了!竟然隨隨便便就
+讓我安裝在RedHat 8.0主機上，它只會安裝到你指定的目錄，執行裏頭的Bnetd伺服指令即可，設定上只
+要設一行指定你的dns即可運用。
+
+它預設會員管理方式是File，很類似BBS架構，你也可指定MySQL資料庫，設定都是超級簡單。詳細一步
+一步的安裝文件請參考：http://pvpgn.mivabe.nl/#HowTo
+
+本人將其再簡化，使用非資料庫的安裝(File)，各位可參考一下：
+
+
+如何安裝Linux版 PvPGN :
+-------------------------
+1.Uncompress the source tarball file.
+root# tar xvfz pvpgn-1.4.6.tar.gz
+root# cd pvpgn-1.4.6/src
+
+2.Choose File/Dababase style installing.
+root# ./configure --prefix=/home/pvpgn (控制安裝於某目錄，初學者用這行)
+root# ./configure --prefix=/home/pvpgn --with-mysql (假如有MySQL的話，請參考原說明文件)
+
+3.Make and Make install (編譯程式，CPU:P3-900一下子就完成了)
+root# make;make install
+
+4.Edit bnetd.conf
+root# vi /home/pvpgn/etc/bnetd.conf (唯一的設定檔)
+
+5.Change the Host/IP. (把第一行改成第2或3行的固定ip模式)
+w3routeaddr = "127.0.0.1:6200" (限區域網路執行)
+w3routeaddr = "203.68.134.96:6200" (可當外部war3伺服器)
+w3routeaddr = "war3.twbbs.org:6200" (可當外部war3伺服器,使用dns較佳)
+
+6.Execute the service in /etc/rc.d/rc.local (每次開機可自動執行)
+root# /home/pvpgn/sbin/bnetd (Standalone的執行方式，靠~太簡單了吧?)
+
+
+如何解除PvPGN Tarball安裝:
+---------------------------
+1. pvpgn_source/src/make uninstall (會移至相關執行檔)
+2. 或直接砍掉/home/pvpgn目錄即可.
+3. 使用者帳號放在/home/pvpgn/var/users/內，升級時備份即可。
+
+當時測試安裝的心態沒想到會成功，興奮之情難以言表，本來想立刻撰寫說明文件來介紹如何架站
+可是本人當時考慮到兩點：
+
+1.豬頭C及天空之城推廣的很好，我不想另立無謂的門派來削弱其虛擬社群力量。
+2.PvPGN雖然有Win32版本，但沒有完整的安裝版本，直到1.4.6才有簡單的安裝方式。
+
+後來網路上有人放出War3 1.05硬碟版，並加速這些站台的線上人數，然而太多人伺服器就容易受不了
+，最多人的豬頭C站台常常連不進去。天空之城一向很穩定，整個站台連線說明文件也很完整，可惜推
+出比豬頭C慢些，市佔率較低。現在網友們常以此兩站為交替站台。
+
+它們都提供連線的設定方式說明及服務，以下貼出它們的網址：
+豬頭C: http://war3.custom.idv.tw/
+天空之城：http://bnet.game.tw/war3/ (本人較偏愛此站)
+
+
+如何安裝Win32版 PvPGN :
+-------------------------
+至PvPGN 1.4.6，終於推出完整的Win32安裝版本，如此簡單安裝的執行檔，也是促成我寫這說明文件
+的動力，請先下載安裝程式：
+http://users.adelphia.net/~dellfeena/srv-win32/pvpgn_1.4.6_win32_full.exe
+
+安裝步驟如下：
+1.執行依指示安裝，不用任何設定。
+2.安裝後在程式集內會有兩個程式：
+PvPGN Elite: 會員管理使用MySQL.
+PvPGN Standard: 會員管理使用一般File方式. (建議初學者使用)
+3.第一次執行請先選擇/Server Configuration編輯config檔，只要找出第一行，用第2或3取代即可。
+w3routeaddr = "127.0.0.1:6200" (限區域網路執行)
+w3routeaddr = "203.68.134.96:6200" (可當外部war3伺服器)
+w3routeaddr = "war3.twbbs.org:6200" (可當外部war3伺服器,使用dns較佳)
+4.你可Restart重新載入，每當按最小化即可背景執行(縮至工作列上)。
+
+
+War3如何連上PvPGN伺服器:
+-------------------------
+沒有比天空之城的文件更清楚了：http://bnet.game.tw/war3/
+Server Name: SkyCastle (War3顯示的Topic)
+Host Name: bnet.game.tw (真正的Host IP)
+Timezone: 8 (時區)
+
+
+結語：
+------
+玩了魔獸系列那麼多年，就是喜歡它的簡單及策略性殺戮。雖然我也曾被AOE的精緻捕魚畫面所感動過(生命如此真實)，但是每次一看到AOE的銅牆鐵壁，我就覺得手軟，網路上百樣種網友，有些就是不想爭霸天下，只想建造最完美的防禦城牆，對於我這種爭欲統一天下的急驚風，實在受不了! 這也是我為何一直玩以簡單著稱的魔獸原因。
+
+另外，在魔獸的伺服器上，戰前適當的叫囂及怒罵，本人覺得有提振遊戲熱度之效，實在沒必要依正常道德規範去指責之。常看到許多很肉腳的仁義之士玩AoS地圖，只要一被激就動不動離開遊戲，這種sula及vaca，不懂得學習他人手法的盲客，Die~~
+
+希望本文件對莘莘網友，能在網路上有所依歸，有志之士快裝個War3伺服器來連線吧! 本文件可隨意轉貼無妨。
+
+
+----------------------------------------------------------------------------------------------------
+
+* 多頁印到同一張紙
+
+	摘自摩托學園討論區
+
+今天早上裝好printer之後，也可以列印出漂亮的中文，真是快樂。
+
+之後又安裝了mpage這個package，他能夠將多頁印在一張紙上，真有趣，很像windows的fineprint。
+
+而我都是先生成ps檔案再用lp列印的
+
+我先用mozilla列印到檔案之後，在用
+
+mpage -4 mozilla.ps > out.ps
+
+gv out.ps，就可以看到有四頁是在同一張紙上的，真讚，長久的列印問題終於解決摟。
+
+mpage 還可以設定紙張大小，例如：
+mpage -8 -bA4 mozilla.ps > out.ps
+就是在一張 A4 的紙上列印八頁的文件。
+
+mpage 除了可以多張印成一頁外，還有可以雙面列印 (duplex) 的功能。
+mpage -t
+只要 printer 有支援( laser 比較好的就會有…)
+這個功能以前好像還要用 filter 其他的程式才能做得到。
+現在所以 ps 的印前工作就一個 mpage 就可以完成了。
+
+
+----------------------------------------------------------------------------------------------------
+
+* 頻寬管理
+
+發表於: 星期四 二月 13, 2003 1:18 pm    文章主題: [轉貼]頻寬管理設定成功了!!  	
+※ 本文轉錄自 [LinuxNetwork] 看板
+
+作者: asho (阿信) 看板: LinuxNetwork
+標題: 頻寬管理設定成功了!!
+時間: Sun Sep 23 09:59:25 2001
+
+上次用了cbq.init的script達成我的限制頻寬目的,
+而這次我是修改tc 的指令,也達成了cbq.init所設定的方法,
+
+在重新說一次我限制的目的：
+我希望client dl ftp,http都可以限制著頻寬的速度,
+而nat的samba服務不要被限制住...
+
+script大約如下
+
+########################################
+
+# limit download bandwidth
+
+########################################
+
+#root level
+#下例為下傳：宣告佇列戒律
+/sbin/tc qdisc add dev eth1 root handle 20: cbq bandwidth 10Mbit avpkt 1000
+
+#top level
+#宣告頂層的類別為： 20:0
+/sbin/tc class add dev eth1 parent 20:0 classid 20:1 cbq bandwidth 10Mbit rate 1
+
+0Mbit allot 1514 weight 1Mbit prio 8 maxburst 20 avpkt 1000
+
+#download from Linux Router max 10MKbits
+#宣告客戶類別，及其頻寬大小 id：為20:100
+/sbin/tc class add dev eth1 parent 20:1 classid 20:100 cbq bandwidth 10Mbit rate
+
+10Mbit allot 1514 weight 1Mbit prio 5 maxburst 20 avpkt 1000 bounded
+
+#download from Linux Router max 160Kbits
+#宣告客戶類別，及其頻寬大小 id：為20:200
+/sbin/tc class add dev eth1 parent 20:1 classid 20:200 cbq bandwidth 10Mbit rate
+
+160Kbit allot 1514 weight 16Kbit prio 5 maxburst 20 avpkt 1000 bounded
+
+#declare the mangage queue
+#宣告管理佇列
+/sbin/tc qdisc add dev eth1 parent 20:200 sfq quantum 1514b perturb 15
+
+/sbin/tc filter add dev eth1 parent 20:0 protocol ip prio 8 u32 match ip sport 1
+
+37 0xffff match ip dst 192.168.0.0/24 flowid 20:100
+
+/sbin/tc filter add dev eth1 parent 20:0 protocol ip prio 8 u32 match ip sport 1
+
+38 0xffff match ip dst 192.168.0.0/24 flowid 20:100
+
+/sbin/tc filter add dev eth1 parent 20:0 protocol ip prio 8 u32 match ip sport 1
+
+39 0xffff match ip dst 192.168.0.0/24 flowid 20:100
+
+/sbin/tc filter add dev eth1 parent 20:0 protocol ip prio 8 u32 match ip sport 2
+
+2 0xffff match ip dst 192.168.0.0/24 flowid 20:100
+/sbin/tc filter add dev eth1 parent 20:0 protocol ip prio 8 u32 match ip sport 2
+/sbin/tc filter add dev eth1 parent 20:0 protocol ip prio 8 u32 match ip sport 2
+
+2 0xffff match ip dst 192.168.0.0/24 flowid 20:100
+/sbin/tc filter add dev eth1 parent 20:0 protocol ip prio 8 u32 match ip sport 2
+
+3 0xffff match ip dst 192.168.0.0/24 flowid 20:100
+
+
+#向核心解釋什麼樣的封包屬於什麼樣別：(全部鎖定)
+/sbin/tc filter add dev eth1 parent 20:0 protocol ip prio 8 u32 match ip dst 192
+
+.168.0.0/24 flowid 20:200
+
+補充一下，這個部份可以安裝debian package的shaper，會比較方便控制，也無須記那麼多指令。
+
+至於用法，shaper這個script寫的很清楚，doc也有說明，小弟便不說了。
+
+
+----------------------------------------------------------------------------------------------------
+
+* Wireless PCMCIA 網卡使用經驗
+
+發表於: 星期四 二月 13, 2003 3:55 pm    文章主題: [轉貼]在 Debian GNU/Linux 上使用 PCI GW-NS11S 無線網路卡  	
+發信人: Rex Tsai <chihchun@kalug.linux.org.tw>, 看板: kalug
+標 題: [Kalug] 在 Debian GNU/Linux 上使用 PCI GW-NS11S 無線網路卡
+發信站: KaLUG. (Wed Sep 4 15:17:34 2002)
+轉信站: Cynix!tlug.sinica!not-for-mail
+Origin: kalug.ks.edu.tw
+
+發現這封信發錯地址，居然沒發到 kalug@kalug.linux.org.tw *faint*
+-- 
+在 Debian GNU/Linux 上使用 PCI GW-NS11S 無線網路卡
+
+*非常簡略的分享*
+
+請使用 Debian woody 版本。
+
+這張卡使用 Intersil PRISM2 chipset，使用 orinoco_cs 模組。注意，
+hotplug package 需要 2.4 之後的核心。因此你得裝上 2.4 後的核心。Debian
+GNU/Linux stable 中有 2.4.18 核心。你可以試著裝上
+kernel-headers-2.4.18
+kernel-image-2.4.18-686
+kernel-pcmcia-modules-2.4.18-686
+
+!! 注意若你自行編譯的核心必須支援 hermes, orinoco 與 orinoco_cs。
+
+此外，為了能夠方便使用 PCMCIA 介面，請安裝以下套件
+
+pcmcia-cs 3.2.0-1 PCMCIA Card Services for Linux.
+wireless-tools 23-2 Tools for manipulating Linux Wireless Extens
+
+pcmcia-cs 套件是讓使用 laptops 使用者可以使用 PCMCIA 介面卡。可以自動
+幫你處理插卡與移除卡片應該自動處理的事情(例如載入模組，設定網路)。因此你
+可以任意隨時的插入與移除卡片。至於 wireless-tools 則提供你設定無線網路的
+工具。
+
+接下來你必須設定相關的網路設定，有兩個重要的檔案，分別是
+
+/etc/pcmcia/network.opts
+/etc/pcmcia/wireless.opts
+
+這兩個檔案其中一個是設定網路組態，另外一個是無線網路設定值
+
+/etc/pcmcia/network.opts 中請設定
+# 例如使用 DHCP
+# 你可以將以下資料覆蓋 /etc/pcmcia/network.opts，或自行拷貝過去
+case "$ADDRESS" in
+*,*,*,*,*)
+DHCP="y"
+;;
+esac
+#
+/etc/pcmcia/wireless.opts 中請設定
+#
+case "$ADDRESS" in
+*,*,*,*)
+ESSID=""
+MODE="Managed"
+# 網路速度, 讓他自行判斷
+RATE="auto"
+;;
+esac
+
+其中 *,*,*,* 其實是設定不同的 PCMCIA Card 所使用的 address 他的格式是
+"scheme,socket,instance,hwaddr"，如果你有多張卡便可以使用便可以指定不同
+的 hardware address 設定不同的網路環境。安裝以上套件並設定完成後，插入該
+PCMCIA Card，此時 PCMCIA cardmgr 應該會自動幫你載入模組(除非他不認得你的
+卡)，因此你可以在 /var/log/daemon.log 找到 cardmgr 產生的訊息。包含載入
+模組等等 ... 例如
+Aug 18 03:10:56 chaos cardmgr[225]: socket 1: Intersil PRISM2 11 Mbps
+Wireless Adapter
+Aug 18 03:10:56 chaos cardmgr[225]: executing: ′modprobe hermes′
+Aug 18 03:10:56 chaos cardmgr[225]: executing: ′modprobe orinoco′
+Aug 18 03:10:56 chaos cardmgr[225]: executing: ′modprobe orinoco_cs′
+Aug 18 03:10:56 chaos cardmgr[225]: executing: ′./network start eth1′
+Aug 18 03:10:56 chaos cardmgr[225]: + ioctl: Operation not supported
+Aug 18 03:10:57 chaos pumpd[316]: PUMP: sending discover
+Aug 18 03:10:57 chaos pumpd[316]: breq: opcode: 1
+Aug 18 03:10:57 chaos pumpd[316]: breq: hw: 1
+Aug 18 03:10:57 chaos pumpd[316]: breq: hwlength: 6
+Aug 18 03:10:57 chaos pumpd[316]: breq: hopcount: 0
+Aug 18 03:10:57 chaos pumpd[316]: breq: xid: 0xd9cc5172
+Aug 18 03:10:57 chaos pumpd[316]: breq: secs: 0
+Aug 18 03:10:57 chaos pumpd[316]: breq: flags: 0x0000
+Aug 18 03:10:57 chaos pumpd[316]: breq: ciaddr: 0.0.0.0
+Aug 18 03:10:57 chaos pumpd[316]: breq: yiaddr: 0.0.0.0
+Aug 18 03:10:57 chaos pumpd[316]: breq: server_ip: 0.0.0.0
+Aug 18 03:10:57 chaos pumpd[316]: breq: bootp_gw_ip: 0.0.0.0
+Aug 18 03:10:57 chaos pumpd[316]: breq: hwaddr:
+Aug 18 03:10:57 chaos pumpd[316]: breq: servername:
+Aug 18 03:10:57 chaos pumpd[316]: breq: bootfile:
+ug 18 03:10:57 chaos pumpd[316]: breq: vendor: 0x63 0x53 0x82 0x63
+Aug 18 03:10:57 chaos pumpd[316]: breq: vendor: 53 1 0x01
+Aug 18 03:10:57 chaos pumpd[316]: breq: vendor: 0xff
+
+如果 cardmgr 找不到網路卡該如何處理 ?
+
+# cardctl ident
+這個指令可以看到你插入電腦中的 PC Card 相關資訊
+例如
+# /sbin/cardctl ident
+Socket 0:
+no product info available
+Socket 1:
+product info: "Geowave", "GW-NS11S", "Version 01.02", ""
+manfid: 0x0156, 0x0002
+function: 6 (network)
+
+你得知道這張卡要使用那個驅動程式(請洽 google 大神)
+例如以我的卡為例子，可以寫到 /etc/pcmcia/geowave.conf
+---
+card "Intersil PRISM2 11 Mbps Wireless Adapter"
+manfid 0x0156, 0x0002
+bind "orinoco_cs"
+---
+重新啟動 pcmcia cardmgr
+# /etc/init.d/pcmcia restart
+
+顯示或設定無線網路
+iwconfig eth1
+
+查看無線網路訊號狀態
+wavemon - Wireless Device Monitoring Application
+wmwave - Monitor status of an 802.11 wireless ethernet link
+
+觀察網路速度
+wmnet - network monitor for WindowMaker using kernel IP accounting
+
+註: PCI 為廠商名字 http://www.planex.com.tw/
+GW-NS11S 是一張 PCMCIA 802.11b 無線網路卡 目前價格約為 1.8K (2002/
+
+
+----------------------------------------------------------------------------------------------------
+
+* 在 Linux 下用 WINE 玩魔獸三
+
+發表於: 星期二 九月 10, 2002 8:29 pm    文章主題: [分享]用 winex 在 X Window 底下玩魔獸爭霸 III  	
+底下為弟安裝 winex 和 Warcraft III 的過程，大部份都是參考前人的作法得來，真的很感謝這些人。回歸正題：
+
+1. 下載 winex 原始碼：
+cvs -d:pserver:anonymous@cvs.winex.sourceforge.net:/cvsroot/winex login
+cvs -d:pserver:anonymous@cvs.winex.sourceforge.net:/cvsroot/winex -z 3 co -r quartz-pre-removal wine
+
+目前的 quartz 原始碼有點問題，不能順利編譯，只好安裝 quartz-pre-removal 的 wine 模組。以上的指令會將 winex 裝在您目前所處的目錄底下。
+
+2. 編譯與安裝 winex：
+(假設上面的步驟將 wine 安裝在 /home/user1/wine/ 底下)
+cd /home/user1/wine
+./confirue --with-x --enable-opengl
+make depend
+make
+su 進入 root 權限
+cd /home/user1/wine
+make install
+
+安裝完成。執行檔和 library 都放在 /usr/local/bin 和 /usr/local/lib 底下。通常 configure 時會遇到需要某些 development headers 而失敗，此時只要將這些套件 (xxxx-dev) 補裝進去後，configure 就可以成功了。這個部份隨著每個系統的不同而有所差異。以我個人的情況而言，我補裝了下列套件：
+bison
+flex
+libjpeg62-dev
+xlibs-dev
+xlibmesa-dev
+nvidia-glx-dev (不確定需不需要。我是因為從 nvidia-kernel-src 和 nvidia-glx-src 安裝 nivida 驅動程式，所以我將這個套件也安裝進來。)
+
+3. 安裝 winesetuptk 套件：
+apt-get install winesetuptk
+以普通使用者的身份執行 winesetup。假如您並沒有使用 Windows partition 的打算，只需要按 "next" 一路到底，程式就會幫您設定完成。以後您的 Windows 軟體都會安裝在 ~/.wine/fake_windows 底下。
+
+4. 安裝 native msvcrt.dll：
+由於目前 wine 內建的 msvcrt.dll 在執行 Warcraft III 方面有問題，所以我們必須將 Windows partition 內的 msvcrt.dll (通常在 c:\Windows\System 或是 c:\Windows\System32 底下) 拷貝到 ~/.wine/fake_windows/Windows/System 底下。假如您想要在桌面上建立一個 Warcraft III 捷徑，您可以將 regsvr32.exe 也拷貝過來。
+
+5. 安裝 Warcraft III：
+mount /cdrom
+(請根據您的系統修改上面這個指令)
+cd /cdrom
+wine --winver win98 --dll msvcrt=n install.exe (或 wine --winver win2k ./install.exe)
+跳過安裝 Direct X 8。Warcraft III 安裝好後，安裝程式會在桌面建立一個捷徑，也會在開始功能集裡面建立一個 winex->Warcraft III 的選單 (不一定每次都成功)。
+
+6. 由於 winex 跑 Warcraft III 的影片有點問題，所以我們必須將 Warcraft III 的 Movie 子目錄移開：
+cd ~/.wine/fake_windows/"Program Files"/"Warcraft III"
+mv Movies bak.Movies
+
+7. 下載 Warcraft III 的 No CD patch，也就是免使用 CD 的版本。我是使用 Warcraft III v1.02 no CD patch (http://www.playground.ru/cheats/681/)。將這個檔案解壓縮後，將 war3.exe 拷貝到 ~/.wine/fake_windows/"Program Files"/"Warcraft III" 底下，取代 War3.exe。
+
+8. 執行 Warcraft III：
+cd ~/.wine/fake_windows/"Program Files"/"Warcraft III"
+wine --dll msvcrt=n War3.exe
+
+p.s. 雖然上面用了 no CD patch 讓 Warcraft III 能正常執行，無論如何，弟希望各位不要濫用，並且請使用正版 Warcraft III CD。
+
+p.s.1 目前弟執行 Warcraft III 的問題有 Battlenet 連線的問題、無法觀賞遊戲中的影片、滑鼠游標並不能隨著不同的種族改變、不能調整畫面明暗度、使用了較不美觀的替代字型...等等。
+
+p.s.2 Warcraft III 的影片為 DivX 格式，聽說安裝 mplayer 就可以觀看，弟目前正在試驗這一部份。
+
+擷取畫面：
+Gardens of War
+http://home.kimo.com.tw/octapult/screenshot-war3-1.html
+Human Chapter 9 - Frostmourne
+http://home.kimo.com.tw/octapult/screenshot-war3-2.html
+Undead Chapter 8 - Under the Burning Sky
+http://home.kimo.com.tw/octapult/screenshot-war3-3.html
+Orc Chapter 8 - By Demons Be Driven
+http://home.kimo.com.tw/octapult/screenshot-war3-4.html
+Night Elf Chapter 7 - Twilight of the Gods
+http://home.kimo.com.tw/octapult/screenshot-war3-5.html
+
+參考資料：
+http://www.winehq.com/hypermail/wine-devel/2002/07/0318.html
+http://www.transgaming.com/showthread.php?msg=11638&forum=6&thread=11638
+http://kt.zork.net/wine/wn20020710_128.txt
+
+
+----------------------------------------------------------------------------------------------------
+
+* 以 libqt3 為例，編譯官方/非官方deb套件
+
+發表於: 星期六 一月 04, 2003 3:55 pm    文章主題: 自行重新編譯官方/非官方 deb 套件 -- 以 libqt3  	
+大家應該都有遇過 "安裝了某個套件，結果卻發現缺少了某個功能。在檢查說明檔的時候，才知道套件維護者在製作 deb 檔案的時候，將某個選項給關閉了，並且建議使用者如果需要使用這個功能的話，可以自行下載原始檔回來製作 deb 檔案。" 的這個窘境吧。由於 KDE 官方提供的 libqt3 套件預設是將 xft 給關閉的，而 Debian 官方 testing 裡面的 libqt3 版本過舊 (3.0.5-3)，unstable 裡面的 libqt3 則是過新又不穩定 (3.1.1+cvs.20021220-1)，兩者都不適用於 KDE 3.0.5a，所以底下弟將以自行製作 libqt3 這個套件為範例，教導各位如何重新編譯 deb 檔案。首先我們假設我們的工作目錄為 /tmp。
+
+1. 由於 libqt3 的下載位址在 http://download.uk.kde.org/pub/kde/stable/3.0.5a/Debian/woody/，所以我們必須在 /etc/apt/sources.list 裡面加入下面這一行，才能夠由這個網址下載製作 deb 的原始檔：
+代碼:
+deb-src http://download.uk.kde.org/pub/kde/stable/3.0.5a/Debian/woody ./
+
+2. 接下來就是下載原始檔囉：
+代碼:
+apt-get source libqt3
+
+系統會自動下載 qt-x11-free_3.0.5-4.diff.gz、qt-x11-free_3.0.5-4.dsc、qt-x11-free_3.0.5-4.orig.tar.gz 這三個檔案，然後自動將 qt-x11-free_3.0.5-4.orig.tar.gz 這個檔案給解壓縮到 /tmp/qt-x11-free-3.0.5 這個子目錄底下。
+
+3. 編譯原始檔的過程常常會用到一些我們沒有安裝在系統裡的套件，而編譯 libqt3 所需要用到的套件，其實我們可以在 qt-x11-free_3.0.5-4.dsc 這個檔案裡面找到。不過 apt-get 提供了一個很簡便的方法幫助我們補齊相關的套件，我們就不必一個一個自己裝了：
+代碼:
+apt-get build-dep libqt3
+
+接著系統就會自動幫我們補齊編譯 libqt3 將會使用到的套件，例如 unixodbc-dev、ibmysqlclient10-dev、postgresql-dev...等套件。
+
+4. 接著請進入 /tmp/qt-x11-free-3.0.5 這個目錄裡：
+代碼:
+cd /tmp/qt-x11-free-3.0.5
+
+
+5. 接下來請執行 dch -i，將我們所要編譯的 deb 套件增加一個版次。如果我們不做這個動作的話，我們在安裝好我們自己編譯好的 deb 檔案以後，又執行 apt-get upgrade 的話，系統會自動以 apt repository 的 deb 套件覆蓋過去，也就是系統將會以 http://download.uk.kde.org/pub/kde/stable/3.0.5a/Debian/woody 下載回來的 libqt3_3.0.5-4.deb，覆蓋掉我們辛苦編譯好的 libqt3_3.0.5-4.deb。所以請執行：
+代碼:
+dch -i
+
+其實執行這個指令等於是進入 vi 裡面去修改 /tmp/qt-x11-free-3.0.5/debian/changelog 這個檔案，在裡面增加一個版次。所以您會發現執行了這個指令以後，您已經在 vi 裡面、正在修改 debian/changelog 這個檔案。接下來請按 i 鍵進入 vi 的 insert-mode，在星號的後面加入一些簡單的說明，接著按 ESC 退出到 command-mode，再按 : 鍵，接著輸入 wq，就會儲存檔案並退出 vi 了：
+代碼:
+
+qt-x11-free (2:3.0.5-5) unstable; urgency=low
+
+  * Qt-3.0.5 with xft support (recompiled by oct 2003/01/03)
+
+-- root <root@debian>  Fri,  3 Jan 2003 22:14:04 +0800
+
+qt-x11-free (2:3.0.5-4) unstable; urgency=low
+
+  * Qt-3.0.5 backport to Debian GNU/Linux 3.0 (Woody)
+
+-- Ralf Nolden <nolden@kde.org>  Sun, 6 Oct 2002 12:50:00 +0200
+
+qt-x11-free (2:3.0.5-3) unstable; urgency=low
+
+  * Sometimes our buildds do strange things (Closes: #155258)
+  * debian/rules: added shlibdeps-path for libqt3-mt.
+  * debian/rules: libqt3-mysql, libqt3-odbc and libqt3-psql contain the
+    unthreaded plugins now (Closes: #152022)
+
+-- Martin Loschwitz <madkiss@madkiss.org>  Thu, 9 Aug 2002 22:18:00 +0200
+
+...................................
+
+執行完 dch -i 以後，您就會發現 changelog 已經增加了一個版次為 3.0.5-5 了，這樣我們編譯完成的 libqt3 將會是 3.0.5-5 版。
+
+6. 接下來就是打開 libqt3 的 xft 選項了。請用文字編輯器打開 debian/rules (其實是 /tmp/qt-x11-free-3.0.5/debian/rules，底下我們都以 debian/rules 稱之) 這個檔案，以搜尋的功能找到 -no-xft 這個地方，然後將 -no-xft 給刪掉，然後將檔案儲存起來。
+
+7. 接下來就是編譯我們的 libqt3 套件囉，請執行：
+代碼:
+debian/rules binary
+
+編譯過程大概要一個小時吧 (cpu 為 AMD Atholon XP 1700+)...
+
+8. 編譯完成以後，會在 /tmp 底下產生下面幾個檔案：
+代碼:
+
+libqt3_3.0.5-5_i386.deb
+libqt3-dev_3.0.5-5_i386.deb
+libqt3-mt_3.0.5-5_i386.deb
+libqt3-mt-dev_3.0.5-5_i386.deb
+libqt3-mt-mysql_3.0.5-5_i386.deb
+libqt3-mt-odbc_3.0.5-5_i386.deb
+libqt3-mt-psql_3.0.5-5_i386.deb
+libqt3-mysql_3.0.5-5_i386.deb
+libqt3-odbc_3.0.5-5_i386.deb
+libqt3-psql_3.0.5-5_i386.deb
+libqxt0_3.0.5-5_i386.deb
+qt3-doc_3.0.5-5_all.deb
+qt3-tools_3.0.5-5_i386.deb
+
+平常我們使用 KDE 3.0.5a 的話，只需要安裝 libqt3、libqt3-mt、libqxt0 和 qt3-tools 就可以了，如果您有在編譯 qt3 的應用程式的話，您必須加裝 libqt3-dev 和 libqt3-mt-dev 這兩個套件：
+代碼:
+dpkg -i libqt3_3.0.5-5_i386.deb libqt3-dev_3.0.5-5_i386.deb libqt3-mt_3.0.5-5_i386.deb libqt3-mt-dev_3.0.5-5_i386.deb libqxt0_3.0.5-5_i386.deb qt3-tools_3.0.5-5_i386.deb
+
+libqt3_3.0.5-5_i386.deb 和 libqt3-mt_3.0.5-5_i386.deb 必須在同一個 dpkg -i 指令裡安裝，才不會出現相依性的問題而不能安裝。
+
+OK，這就完成了所有的步驟，您可以再執行一次 apt-get upgrade，就會發現系統不再以系統內定的 deb 來取代我們自己編譯的 deb 了
+
+後記：大家在安裝好自己編譯的 deb 套件以後，可能想要將之前經由 apt-get build-deb libqt3 所安裝的一些不常用的套件給移除掉，可惜的是弟找不到比較簡便的方法來移除掉這些套件，所以只好依據 qt-x11-free-3.0.5-4.dsc 這個檔案的內容，自己一個一個移除了 
+
+
+----------------------------------------------------------------------------------------------------
+
+* telnet 上 bbs 後捲動畫面時總有幾列會消失的解決法
+
+	這問題困擾我好久, 以前都要重新按 Ctrl + L 刷新畫面. 今天無意間把TERM環境變數改成ANSI後就沒出現. 或許真的解決了 :)
+
+	alias telnet='TERM=ANSI telnet -8'
+
+	經實驗證實, 該狀況只要是 terminal 軟體畫面大小有調過都會發生. 上bb前只有乖乖的用原視窗大小了.
+
+----------------------------------------------------------------------------------------------------
+
+* 加快硬碟速度
+
+	以下均以 /dev/hda 做例子
+
+	1. 啟動 32bit i/o
+
+		hdparm -c3 /dev/hda
+
+	2. 啟動 DMA
+
+		hdparm -d1 /dev/hda
+
+	3. 啟動 UltraDMA 2 (或5)
+
+		hdparm -X udma2 /dev/hda
+		hdparm -X34 /dev/hda
+		
+		hdparm -X udma5 /dev/hda 
+		hdparm -X69 /dev/hda
+
+		註: 若在 /etc/rc.d/rc.* 啟動 DMA 常常會當機. 反正 sis5513 會一開始就幫硬碟設定dma. 因此加到 /etc/rc.d/rc.local 中就不要包含 -d1 -X??? 了
+
+	4. 啟動 IDE Block Mode
+
+		先以 hdparm -i /dev/hda 查詢 MaxMultSect=後方數字多少 (假設為16)
+
+		hdparm -m16 /dev/hda
+
+	5. get/set interrupt-unmask 可增強 Linux 反應並減少 serial port overrun 錯誤
+
+		hdparm -a16 /dev/hda (預設值為8,在此加倍為16)
+
+	6. 啟動 Write Cache
+
+		hdparm -W1 /dev/hda
+
+	7. 允許硬碟保留原始設定(以便在錯誤問題發能恢復到原設定,但並非所硬碟都支援)
+
+		hdparm -K1 -k1 /dev/hda
+
+
+	一旦調校完畢, 可用以下命令看看傳輸效能是否有改善
+
+		hdparm -vtT /dev/hda
+
+		hdparm -d1 /dev/hda
+----------------------------------------------------------------------------------------------------
+
+* info 
+
+	欲讀取特定 info 檔案:
+		info filename		或
+		info -r filename	或
+		info -f filename
+
+	註: pinfo 亦可以上述語法讀取 info 檔案.
+		
+
+----------------------------------------------------------------------------------------------------
+
+* 讓 lynx 顯示中文網頁不掉字
+
+	修改 /etc/lynx.cfg 或 ~/.lynxrc 把關於編碼設定都改成 big5 即可
+
+----------------------------------------------------------------------------------------------------
+
+* 惱人的倒退鍵
+
+	在某些環境下無法使用倒退鍵嗎？試試下列命令
+
+	stty erase ^H
+
+	註：^H 是按倒退鍵產生的，也有可能是別的樣子。但是不管如何，就是按倒退鍵就是了。
+
+----------------------------------------------------------------------------------------------------
+
+* 運用 for 及 find 時遇到檔名有空白的問題
+
+	想用 for f in `find -iname *foo*` ; do foobar ; done 時若找到的的檔名包含空白時會將一個檔名拆成好幾份分別置入 f 變數. 此時可以利用 IFS 變數, 防止此情況發生(以script為例)
+
+IFS="	
+"
+for f in `find -iname *foo*` ; do foobar ; done 
+
+	註: IFS=" 後分別是 tab 鍵及 enter 鍵
+
+----------------------------------------------------------------------------------------------------
+
+* 遇到檔名有 - 該怎麼辦
+
+	比如說有檔案名為 test -E , 若執行 mv test* foobar/ 會出現以下錯誤訊息:
+
+	mv: invalid option -- E
+	Try `mv --help' for more information.
+
+	此時可以用 mv -- test* foobar/ 解決, -- 的用意是告訴程式後方沒有任何參數了
+
+----------------------------------------------------------------------------------------------------
+
+* 將檔名由UTF8編碼改成BIG5編碼
+
+	mv $file `echo $file | iconv -f utf8 -t big5`
+
+----------------------------------------------------------------------------------------------------
+
+* fontconfig 的替換字型 （摘自摩托學園）
+
+	同樣在fedora和debian中的gnome選用Sans這個英文字型，但是遇到中文時表現的字體卻完全不一樣。原因是出在：
+
+	/etc/fonts/fonts.conf
+
+	在所有的 <family>AR PL KatiM Big5</family> 前面加上 <family>MingLiU</family>
+
+	在 
+	<!--
+	Monospace faces
+	-->
+	中加上<famly>PMingLiU?family>，如此一來選任何英文字型都會自動用新細明體或細明體當作中文字型。
+
+----------------------------------------------------------------------------------------------------
+
+* 查詢目前哪些程式開哪些PORT
+
+	以前一直以為說只有睩湤潷s下的?湹/Kerio Personal Firewall才能秀出什麼程式開了什麼埠。今天，逛Linux ?捵s線上雜誌時發現socklist這個命令即可查詢目前什麼程式開什麼埠。但是要注意，只有root才能看到程式名字。
+
+	socklist 隸屬於 procinfo 套件，同屬於此套件的：
+
+	1. procinfo 程式可以顯示出目前記憶體使用量、不同等級PROCESS佔用時間比例及IRQ中斷次數。
+
+	2. lsdev 可以列出目前安裝的硬體及佔用的DMA、IRQ及IO PORT。
+
+----------------------------------------------------------------------------------------------------
+
+* 一次製做大量 symbolic link (不是用find去找出所有檔案再一個一個處理)
+
+	假設要將 /mnt/fc1_1/Fedora/RPMS/*.rpm 都在 /pub/linux/Fedora/Core_1/i386 建立一份symbolic link, 則可以下方式建立:
+
+	cd /pub/linux/Fedora/Core_1/i386
+	ln -s --target-directory=. /mnt/fc1_1/Fedora/RPMS/*rpm
+
+	再來是更進階的, 一次處理三片, 而且不用切換目錄
+	ln -s --target-directory=/pub/linux/Fedora/Core_1/i386/ /mnt/fc1_{1,2,3}/Fedora/RPMS/*rpm
+
+
+----------------------------------------------------------------------------------------------------
+
+* 實用的 curl 軟體，
+
+部份功能使用方法如下：（摘錄自 wiki.debian.org.tw 網站）
+
+如果某個伺服器上有 pix1.jpg、pix2.jpg、pix3.jpg、...、pix100.jpg，我們想透過 curl 將這些檔案都抓下來的話，可以這麼處理：
+
+curl http://server_somewhere/pix[1-100].jpg -o "pix#1.jpg"
+
+如果檔名是 pix001.jpg、pix002.jpg 呢？也可以稍微更動成：
+
+curl http://server_somewhere/pix[001-100].jpg -o "pix#1.jpg"
+
+
+----------------------------------------------------------------------------------------------------
+
+* 將 rpm -qa 查到的套件去除版本號碼, 只留下套件名稱
+
+	剛開始是用:
+
+		rpm -qa|sed -e 's,-[0-9].*$'
+
+	但是發現像 XFree86-100dpi, XFree86-75dpi, XFree86-4.3 都會變成 XFree86
+	所以做了改良, 變成:
+
+		rpm -qa|sed -e 's,-[.0-9]*-[0-9]\+.*$'
+
+----------------------------------------------------------------------------------------------------
+
+* 讓 man 出現彩色
+
+	預設值是用浯?當顯示程式，只要安裝浯?這個套件後，再將環境變數PAGER定成most即可。
+
+	apt-get install most
+	export PAGER=`which most`
+
+----------------------------------------------------------------------------------------------------
+
+* serial 只能傳送 0x00 ~ 0x1f, 其它數值的最高三位元會被清掉
+
+	因為我寫程式時忘了設定 cflags 內關於 8N1 的設定導致如此.
+
+	另外, 0x0d 變成 0x0a 是因為我在設定 raw input 時誤將應該填到 iflag 的數值填到 lflag 了.
+
+----------------------------------------------------------------------------------------------------
+
+* 找出什麼程式開什麼埠
+
+	以前以為只有:
+		netstat -p	看所有連線 (TCP, UDP, Unix) 程式
+		netstat -tp	看所有的TCP連線程式
+		netstat -tlp	看所有Listen TCP埠的程式
+		netstat -ulp	看所有Listen UDP埠的程式
+
+	後來又發現一個程式也可以看:
+		lsof -i TCP:22	看什麼程式開TCP埠22
+
+	註: lsof 主要是看開啟的檔案, 因此, 應該有更寬廣的用途. 改天再研究
+
+	
+
+----------------------------------------------------------------------------------------------------
+
+* 找出什麼程式佔用了某裝置
+
+	fuser -v /dev/dsp
+
+	註: fuser 的用途應該不止於此
+
+----------------------------------------------------------------------------------------------------
+
+* 如何應付容易斷線的工作環境
+
+	摘自 tw.bbs.comp.linux
+
+	用screen指令
+	
+	連入系統後
+	$ screen
+	$ vi your_prog
+	..
+	斷線
+	..
+	
+	再連入系統
+	$ screen -list
+	There is a screen on:
+	        2607.pts-1.hostname (Detached)
+                                ^^^^^^^^^^
+	1 Socket in /home/usrname/.screen.
+	$ screen -r 2607.pts-1.hostname 就可以把它接回來了
+	
+	接著作斷線之前的動作了...
+
+	萬一是
+	$ screen -list
+	There is a screen on:
+	        2607.pts-1.hostname (Attached)
+                                ^^^^^^^^^^
+	1 Socket in /home/usrname/.screen.
+	就用
+	$ screen -d 2607.pts-1.hostname 先切斷
+
+	[2607.pts-1.hostname detached.]
+	再用
+	$ screen -r 2607.pts-1.hostname 就可以把screen切斷再接起來
+	
+	screen詳細用法請看
+	$ man screen
+	$ info screen
+
+----------------------------------------------------------------------------------------------------
+
+* 救毀損的硬碟分割表
+
+如果只是 fdisk，只是 partition table 毀掉，通常 "gpart" 可以幫你把原本的 partition table 猜回來。
+
+gpart - Guess PC disk partition table, find lost partitions
+http://www.stud.uni-hannover.de/user/76201/gpart/
+have fun.
+
+
+----------------------------------------------------------------------------------------------------
+
+* 掛載 cue/bin
+
+	http://cdemu.sourceforge.net/
+
+   1.  extract the archive:
+      $ tar -jxvf cdemu-<VER>.tar.bz2
+   2. you need the source of your current running kernel.
+      /lib/modules/$(shell uname -r)/build/include needs to point at it.
+   3. build the module:
+      $ make
+   4. install the module and user space utilities:
+      $ sudo make install
+   5. now simply load the kernel module:
+      $ sudo modprobe cdemu
+      (no message should be displayed after running modprobe)
+   6. to load a bin/cue image:
+      $ cdemu 0 image.cue
+      $ mount /dev/cdemu/0 /mnt/cdrom
+      (some things may be different on your system, YMMV)
+   7. for more information, please review the help output:
+      $ cdemu -h
+
+
+----------------------------------------------------------------------------------------------------
+
+* Benq Joybok 5000U 安裝 Linux 實戰與 Intel Pro/Wireless 2100 網卡的驅動
+
+	不管是 RedHat 9 還是 Fedora Core 1， 只要一跑到 apmd 就會 crash 掉， 並一直印出像是 ksyms 的東東。 不得已， 只好用 Fedora Core 2
+
+	安裝過程很順利， 使用上也很正常。 若採用 KDE 為視窗管理程式不須作什麼修改就可以即時看到現在筆電用的電源是交流電還是電池； 以及電池目前容量多少。
+
+	接著是無線網卡， 去 ipw2100.sf.net 下載 ipw2100-0.46_w.tgz 以及韌體 (因版權關係無法附在 source 中)， 忘記名字的話可以用 sf.net 的搜尋專案功能找， 但是， 不要點它預設的 url， 要改成 專案名稱.sf.net 這樣子連過去才看的到韌體的下載網頁， 還有一些其它人編譯好的 RPM 檔案。
+
+	在編譯 ipw2100 之前， 因為它加密 (WEP) 部份並未實做， 而是直接採用 hostap 的程式碼。 因此， 還要下載 hostap-driver-0.1.3.tar.gz 的原始碼來編譯。
+
+	編譯時唯一要注意的事只有:
+		1. 把 kernel source 的 Makefile 內的 EXTRAXXXXXX 的 custom 字眼拿掉，並 make bzImage (不用這個編出來的核心， 只是要利用它幫我們產生hostap 及 ipw2100需要用的 kernel header file)
+		2. 在 /usr/src 做一個名為 linux 的 symbolic link 連到 kernel source 所在目錄
+
+	這樣子一來編 hostap 時只要 make ; make install 即可。
+
+	接著把 ipw2100-0.46_3.tgz 解開， make HOSTAP=/path/to/hostap-driver-0.1.3 ; make install 即可。
+
+	使用時 modprobe ipw2100 後依據一般動態取得 ip 或者靜態 ip 設法設定即可。
+
+----------------------------------------------------------------------------------------------------
+
+* 讓 Adobe Acrobat Reader 也能使用滾輪
+
+apt-get install imwheel
+
+vi ~/.imwheelrc
+
+#my ~/.imwheelrc
+".pdf"
+None, Up, Page_Up
+None, Down, Page_Down
+
+
+#insert this line to your ~/.xinitrc
+imwheel &
+
+#make sure you have this line in /etc/X11/XF86Config-4 Section "InputDevice"
+Option "ZAxisMapping" "4 5"
+
+Restart your X
+
+----------------------------------------------------------------------------------------------------
+
+* VNC 的另一個作用， 將電腦連續動作轉成 swf
+
+	摘自 http://fedoranews.org/tchung/fc2-movie/
+
+MOVIE: Fedora Core 2 "The Movie" and the secret "Behind the Story"
+by Thomas Chung on Jun 4, 2004
+
+Here is the sequel to Fedora Core 1 "The Movie", Fedora Core 2 "The Movie" and this time, I'll reveal the secret "Behind the Story"
+
+You will need Flash Player to play this movie.
+
+In order to create this flash movie, you need two components. One is called vnc2swf which captures the live motion of a screen through VNC protocol and converts it a Macromedia Flash(TM) movie (.swf) and the other one is called ming which is a C library for generating SWF ("Flash") format movies.
+
+Here are RPM packages for vnc2swf and ming built specifically for Fedora Core:
+
+http://download.fedoranews.org/ming
+http://download.fedoranews.org/vnc2swf
+
+You only need to install 3 rpms in following order:
+
+rpm -Uvh libming0-0.2a-1.FC.i386.rpm
+rpm -Uvh libming0-devel-0.2a-1.FC.i386.rpm
+rpm -Uvh vnc2swf-0.4-1.FC.i386.rpm
+
+Now you need a system (Machine #1) to install Fedora Core 2 and boot the system with following command:
+
+boot: linux vnc
+
+This will start vncserver and you will able to see and capture the vnc session from another computer (Machine #2) with following command:
+
+vnc2swf -startrecording -nostatus -framerate 15 fc2-movie.swf (IP-Address of Machine #1):1
+
+Thanks to Yusuke Shinyama with vnc2swf project, make sure to create a small html document with following embed source code to display the flash content properly from the web:
+
+<html><body>
+<embed SRC="fc2-movie.swf"   
+   WIDTH="800" HEIGHT="600"   
+   PLAY="true" ALIGN="" LOOP="false" QUALITY="high"   
+   TYPE="application/x-shockwave-flash"   
+   PLUGINSPAGE="http://www.macromedia.com/go/getflashplayer">
+</embed>
+</body></html>
+
+REFERENCE
+Fedora Core 2 Release Notes (Look for section begins with "Installation via VNC")
+
+
+----------------------------------------------------------------------------------------------------
+
+* 如何知道目錄被什麼程式鎖定
+
+> 在 Windows 安裝 WhoLockMe ,
+> 只要在資料夾按右鍵 , 點選WhoLockMe,就可以很容易知道
+> 某個資料夾(如:"C:\Documents and Settings\Administrator\桌面\test")跑哪些程式!
+> 請問在Linux環境下,想知道某個目錄(如:/home/test)跑什麼程式,
+> 應該安裝什麼套件呢?
+> 或者要下什麼指令?就可以清楚的知道跑哪些程式.
+
+ man fuser
+ man lsof
+
+----------------------------------------------------------------------------------------------------

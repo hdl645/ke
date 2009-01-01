@@ -1,0 +1,122 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* GRUB 改選單加密碼
+
+	1. 先用 grub 開機, 進入 command mode.
+	2. 執行 md5crypt, 等出現 Password: 後輸入要編碼的密碼.
+	3. 將出現的一大串亂碼抄下來
+	4. 開機進 linux, 修改 /boot/grub/menu.lst
+	5. 將 password --md5 還有第二步驟抄下來的亂碼加在第一個 title 以上
+	6. 完工
+
+	註: 以前有用過別的方法可以在 linux 下直接產生編碼過的密碼, 但是忘了方法了.嘗試過 echo PASSWORD | md5sum, 但是產生出來的並不是我們需要的.
+
+	註: 在 linux 下產生經過 md5 編碼過密碼的方法是執行 /sbin/grub-md5-crypt
+
+	註: 上述方法僅僅不允許修改開機選單, 若要做到輸入正確密碼後才能使用開機選單則請在第一個 title 下加上 lock; 或者直接把步驟5的那一列加到 title 以下.
+
+----------------------------------------------------------------------------------------------------
+
+* 如何把 windows 裝在第一顆以外硬碟, 並使用 grub 做開機程式
+
+	+ 裝 windows 之前必須先將 bios 中第一顆硬碟設成 none, 因為,當 windows 2000 & xp 不認得第一顆硬碟的 active 分割時會拒絕安裝.
+	+ 裝好 windows 後恢復 bios 中第一顆硬碟的設定, /boot/grub/menu.lst 設定方法如下 (假設 windows 裝在第二顆硬碟的第一個主要分割):
+
+		rootnoverify (hd1,0)				指定 windows 所在分割, 並要求 grub 不要檢查該分割的 type
+		map (hd0) (hd1)					這兩列的用意是欺騙 windows 的啟動程式
+		map (hd1) (hd0)
+		chainloader +1						執行啟動程式
+
+----------------------------------------------------------------------------------------------------
+* 修復 GRUB BootLoader
+
+	1. 以 GRUB 特製開機片開機請參考grub文件製作, 或者原grub程式仍然可使用, 只是選單損毀亦可
+
+	2.	以 root 命令指定linux根目錄或者包含/boot的分割, 假設是 (hd0,5), 則執行:
+		root (hd0,5)
+
+	3. 以 setup 命令重裝grub
+		setup (hd0)
+
+----------------------------------------------------------------------------------------------------
+
+* GRUB 加底圖
+
+前些日在版上，和幾位大大
+討論後，測試過，確定Debian的grub
+含有背景圖的patch (今天在網頁上看到有人也這樣說)
+所以我就很高興的試試我的grub的底圖
+發現了了一些問題
+查到說grub的底圖只有14色，而且大小是640*480
+還有只能用xpm(若嫌太大可用xpm.gz格式)
+所以我想了辦法搞定這一切
+然後希望大家能因為我這篇文章，能對grub的安裝不在害怕
+
+方法如下：
+
+1.安裝gurb(我的環境是在testing下，所以請各位自己轉換一下source.list和apt-get update喔！)
+# apt-get install grub
+
+2.把它安裝到你的開機磁區裡
+grub-install /dev/hda
+
+3.用文字編輯器寫你的開機的選單
+檔名為menu.lst，路徑為/boot/grub/
+內容如下
+default=0 #預設開機是第一個title
+timeout=5 #選單延遲五秒
+splashimage=(hd0,1)/boot/grub/splash.xpm.gz
+#重點：上面這一行加上去就會讓你的grub有美美的底圖了，記得要打「絕對路徑」喔！要不然會找不到，而且會讓你沒辦法正常開機，hd0代表第一顆硬碟，0是第一個partion，第二個partion就為1，後面以此類推)
+
+title Debian3.0 (2.4.18-bf2.4) #這是選單項目的名稱
+root (hd0,1) #這是指定root為那個partion
+kernel (hd0,1)/boot/vmlinuz-2.4.18-bf2.4 ro root=/dev/hda1 #這行是指你的kernerl的位置，建議用絕對路徑
+savedefault
+boot
+
+title RedHat9.0 (2.4.20-
+root (hd0,2)
+kernel (hd0,2)/boot/vmlinuz-2.4.20-8 ro root=LABEL=/ hdc=ide-scsi
+initrd (hd0,2)/boot/initrd-2.4.20-8.img
+savedefault
+boot
+
+title Mandrake9.1 (2.4.21-013mdk)
+root (hd0,3)
+kernel (hd0,3)/boot/vmlinuz-2.4.21-0.13mdk ro root=/dev/hda3 hdc=ide-scsi
+initrd (hd0,2)/boot/initrd-2.4.21-0.13mdk.img
+savedefault
+boot
+
+#相信很多人電腦不止linux吧！^^順便教大家如何加入win開機
+title Win2000
+rootnoverify (hd0,0) #指定開機的磁碟
+chainloader +1 #因為m$是封閉式的os，所以要用chainloader的方式啟動該分割區的第一個磁區裡的開機程式
+
+4.現在教大家如何製做底圖
+把你想要圖檔用gimp開啟
+然後先在圖檔上按右鍵
+選撢
+圖像 -> 模式 -> RGB
+然後再按右鍵
+圖像 -> 模式 -> 索引色
+執行後，出現下面視窗，然後改成像我一樣(因為gurb只支援14色，而選"不Dither色彩"是因為這樣的轉換，畫質才不會差太多)
+
+
+5.然後再在圖檔上按右鍵
+圖像 -> 圖像尺寸
+執行後，出現下面視窗，然後改成像我一樣(因為gurb只支援640*480)
+
+
+6.然後把它存成.xpm.gz檔，路徑為/boot/grub/(建議啦！)
+
+7.然後重新開機，就可以看到美美的底圖加grub選單了
+
+
+參考資料：
+網址：http://list.softwareliberty.org/pipermail/slat-talk/2002-November/002831.html
+在此感謝，阿信兄、swallowman.的幫忙
+
+
+----------------------------------------------------------------------------------------------------

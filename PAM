@@ -1,0 +1,340 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* Linux PAM
+
+作者：呂建毅
+
+
+--------------------------------------------------------------------------------
+
+前言
+
+在Linux上任何要授予使用者某些特權的程序都要進行使用者認証。也就是當您登入系統時，你必需提供使用者名稱和指令，然後登入程序才能根據你所給予的名稱和指令以檢驗登入的合法性，確認你就是該使用者。但除了指令的認証之外，還有其他認証形式，另外指令的儲存方式也是各不相同的。
+
+而PAM（Pluggable Authentication Modules for Linux）(Linux可插可拔的認証模組)的方式就是允許系統管理員可以設置多種認証方式，而不須要再重新編譯要進行認証的程序。使用PAM，你可以只編輯一個配置文件就可以決定認証模組要如何崁進程序之中，而這個配置文件是動態的去讀取本地的配置模組，再去執行驗證的工作。大多數RedHat使用者不須改動這個配置文件。因為在Red Hat上使用RPM來安裝程序的話，系統會自動做一些有關聯的改動。但是，如果你想要重新定訂認証模組的話，就需要重新配置文件，並了解理解配置文件內容。
+
+
+--------------------------------------------------------------------------------
+
+1.1 PAM Modules
+
+PAM定義了[auth，account，password，session]四種型式的模組。auth模組提供了實際的認証過程，也就是提示且檢查輸入的指令，並設置保密字，如用戶組或KERBEROS的通行証。account模組負責檢查並確認是不是可以進行認証（例如，使用者的帳戶是否到期，使用者是否可以登入，等）。 password模組是被用來配置指令的。當使用者認証通過時，session模組就是將被用來當做使用者在使用他的帳戶前的初始化工作，比如說安裝使用者的家目錄，使用者的電子郵箱，等。
+
+這四個模組是可以堆疊的並能多次使用。例如說，我設定一個指令使用兩種以上的認証方法，如果認証成功了，當然就允許進行連接，否則的話就還要再進行標準的認証程序，以此類推。
+
+也可以隨時加入新的模組，只要是PAM所知模組，程序就可以被配置來使用它。例如，當你有一個計算系統，它可以寫出一個模組出來，PAM所知的程序就不需要重新編譯，他就可以使用這個新的計算器.當然系統中要有配置如何撰寫模組的文檔資料。
+
+
+--------------------------------------------------------------------------------
+
+1.2 服務
+
+每個使用PAM的認證程序都有它自己所定義的服務名稱。例如我們所熟悉的login認證程序就定義其服務類型名稱為login，而ftpd程序定義其服務類型為ftp。其實一般來說，PAM所服務類型就是存取其服務的程序的名字，而不是提供服務的程序。如果你想要詳細了解PAM所定義的服務類型或是應用程序，你可以參考/etc/pam.d目錄下的檔案，如下所示：
+
+[root@st10 pam.d]# ls
+
+chfn linuxconf passwd samba xscreensaver
+
+chsh linuxconf-pair ppp su
+
+ftp login rexec vlock
+
+imap mcserv rlogin xdm
+
+kde other rsh xlock
+
+
+--------------------------------------------------------------------------------
+
+1.3 配置文件
+
+在早期的PAM版本中所有的應用程序用的是 /etc/pam.conf這個檔案;但現今的版本就是我們上一節所提到的/etc/pam.d這個目錄，但是當/etc/pam.d這個目錄不存在的時候，PAM會去存取/etc/pam.conf這個檔案.而在PAM上的每一個服務都有它自己的配置文件，而/etc/pam.conf這個檔案和/etc/pam.d這個目錄下的檔案所定義的配置文件是有差異的，我們在這個章節將會全部介紹/etc/pam.conf這個檔案和/etc/pam.d這個目錄下的檔案這兩種設定方式。
+
+1.3.1 /etc/pam.conf檔案格式
+
+大部分的/etc/pam.conf編輯格式如下所示：
+
+login session required /lib/security/pam_unix_session.so
+
+服務名稱 模組類型 控制符號 模組的路徑 參數
+
+以下我們將來說明每一個工作的意義，及/etc/pam.con的撰寫，而第二種編輯PAM的方法是去修改/etc/pam.d這個目錄中的檔案.在此我們先說明上述的工作意義。
+
+服務名稱：有關於登入服務的名稱.大部分都是以所提供的服務為名，例如ftpd，rlogind，或su等.另外還有一個特別的服務名稱，他是保留預設值所定義的結構，他的名稱是[OTHER]，但要注意的是，當有一個模組是定義這個名稱時，他是被忽略的，也就不使用的。
+模組類型：這我們已經在上一節就已經談過，我們在這裡要詳述描寫。
+auth：這個模組提供使用者兩方面驗證的方法，首先，他會先確認使用者是誰，並命令應用程式提示使用者鍵入密碼或是其他的驗證方法，然後這個模組會提供群組會員數目(這裡跟/etc/groups是不一樣的，他是獨立性的。
+account：這個模組不是執行驗證帳戶的處理，它是被使用在限制在一定的時間去存取服務，大部分的使用者都是透過這個模組的處理才可以存取服務的資源，但唯有root是例外的，因為root被限定只能在控制台。
+session：首先，這個模組是聯合一些使用者在以前或以後會得到的服務，還包括了屬於使用者一些數據的開啟/關閉的訊息，例如外掛一些目錄等。
+password：這個模組是被要求去更新驗證動作，也就是說這個模組是對autu模組應答。
+控制符號：控制符號是被使用去指示PAM的文庫將如何去執行模組驗證成功或失敗之後的動作，在前幾章節，我們已經談過模組是可以堆疊使用的，而控制符號就是確認每個模組間的重要關係。控制符號總共有四個關鍵字，分別是required，requisite，sufficient和optional，以下我們將詳細介紹四個關鍵字的功能：
+required：這個關鍵字在模組的驗證成功部分是必要的.也就是說當模組驗證成功時，這個關鍵字的功能就是執行模組所定義的情況，而當模組驗證失敗時，這個關鍵字的功能就是繼續執行你所另外定義的模組(不要忘記模組是可堆疊的)。
+requisite：這個關鍵字的功能跟上述是一樣，只是執行的情況是相反的，也就是說當模組驗證失敗時，這個關鍵字就返回失敗的結果給應用程式，讓應用程式繼續驗證這個模組，並不像required一樣接下去執行下一個模組的驗證。其實這個關鍵字常跟required一併使用，只是你要注意這兩個關鍵字所執行的順序，而這個關鍵字的功能主要是防衛使用者在可能的機會下使用不安全的媒介進入本系統。
+sufficient：這個關鍵字所定義的就是已經被驗證成功的模組，也就是說當模組被驗證成功時，這個關鍵字就符合了PAM文字庫的目的，而在這個事件中，已經不存在模組是否驗證失敗，或是堆疊的模組是否有被叫喚。
+optional：這個關鍵字的功能就跟他字面上的解釋是一樣的，是可以選擇的，總之，這個關鍵字的功能主要是當早先的驗證成功或是之後的堆疊的模組執行，只要有空缺的情形，它就會回應給應用程式。
+模組的路徑：這裡的路徑是你可以隨便取名的，在Power Linux的預設值中是/lib/security。
+參數：當模組被呼叫時，參數就是被傳送到已被呼叫的模組的工作列表，這裡的參數其實跟Linux Shell命令是大同小異的，通常，正確的參數是可以選擇的，也可以特定可予一些模組，而無效的參數是會被模組忽略的，而當遇到一個無效的參數時，模組會被要求寫錯誤紀錄檔，而大部分的參數列表，我們將在下一章節介紹。
+1.3.2 /etc/pam.d目錄基本設定
+
+/etc/pam.conf這個檔案和/etc/pam.d這個目錄下的檔案，這兩種的檔案格式，都是可以定義PAM的驗證程序，這個我們在上一章節已經介紹過了，而/etc/pam.conf這個檔案格式和/etc/pam.d這個目錄下的檔案格式是相似的，差別只在於更/etc/pam.d這個目錄下的檔案格式不定義[服務名稱]，其他四種檔案格式[模組類型，控制符號，模組的路徑，參數]是都一樣，至於為什麼/etc/pam.d/這個目錄為麼沒有定義[服務名稱]的格式，這是因為在/etc/pam.d這個目錄下的檔案名稱就是PAM所執行的服務名稱，學員可以自己至/etc/pam.d這個目錄下觀察.但是現在的PAM版本的預設值都是去讀取/etc/pam.d這個目錄的檔案格式，至於為何要修改成這種方式，學員可以自己去評量，現在我們列出以下的觀點，讓使用者自己去評量這兩種方式的優缺點：
+
+較少的會有錯誤配置應用程式的機會，也較少的地方需要援助編輯配置文件。
+維護較簡單，一個應用程式可以重新配置，而不需要顧慮到是否有其他的應用程式在系統中。
+它可以以象徵性的方式連結不一樣的應用程式的配置文件到單一文檔案，這樣可以讓它簡單的透過不一樣的應用程式而更加鞏固存取的權限。
+它可以限制正在使用文件系統保護檔案的PAM配置文件讀的權限。
+軟體的管理顯得更簡單，當你安裝一個新的應用程式時，你只要將它放在/etc/pam.d/xxxxxfile就可以了。
+
+--------------------------------------------------------------------------------
+
+1.4 參數介紹
+
+以下介紹的參數是任何一個模組都能了解的，這些參數使可以隨意選擇的。
+
+debug-使用syslog(3)的規格紀錄錯誤訊息到系統紀錄檔。
+no_warn-命令模組不給予警告訊息給應用程式。
+use_first_pass-這個選項不是提示使用者密碼的，反而它是獲得你以前所打入的密碼(從之前auth這個模組而來)，並使用它，如果它不工作，使用者就不會被驗證身分.(這個選項大都是auth和password這兩個模組使用)
+try_first_pass-這個選項是嘗試驗證使用者密碼(從之前auth這個模組而來).如果它不工作，這個使用者就會再被提示要輸入密碼。(這個選項大都是被使用在auth這個模組)　
+use_map_pass-這個參數通常不支援PAM裡任何一個模組的分布區，因為在美國會限制加密輸出，所以這個參數是用在你自己ㄎ發的模組..但是在美國，模組的開發者當然還是可以自由去執行的，所以基於相容性的問題，我們建議你要參考DEC-RFC 86.0這個機制，你可以看http://www.pilgrim.umass.edu/pub/osf_dce/RFC/rfc86.0.txt這個文件.這個參數命令模組可以藉由之前的模組清除文件驗證，而且使用它去產生關於加密/解密且能安全的儲存/取回的字元.基於這個方法，你可以加入一個單一驗證而且可以藉由堆疊的數目就能很快速的驗證.很明顯的，這個方便的特色必然地需要一些可靠有有力的加密使它更安全.這個參數只使用在auth和password這兩個模組。
+
+--------------------------------------------------------------------------------
+
+1.5 配置文件的範例
+
+現在我們來檢視一下/etc/pam.d/login這個檔案的內容，範例如下：
+
+[root@st10 pam.d]# more login
+
+#%PAM-1.0
+
+auth required /lib/security/pam_securetty.so
+
+auth required /lib/security/pam_pwdb.so shadow nullok
+
+auth required /lib/security/pam_nologin.so
+
+account required /lib/security/pam_pwdb.so
+
+password required /lib/security/pam_cracklib.so
+
+password required /lib/security/pam_pwdb.so shadow nullok
+
+use_authtok
+
+session required /lib/security/pam_pwdb.so
+
+任何以#開頭的行都是注釋，所以第一行是注釋。以下的三行排列著用於login認証的三個模組，其中第一行是用以確認用戶是不是以root的身分登入，允許登入的tty是被列在/etc/securetty這個目錄中的pam_securetty.so這個檔案，而第二行是提示使用者輸入命令及驗證口令。第三行表示檢查/etc/nologin這個文件是否存在，如果存在就顯示其內容，而且如果用戶不是root，就禁止登入。也就是說如果第第一個模組驗證失敗了，也要完成三個模組的驗證。這是一種安全上的考量，PAM這種設計和考量用意是要永遠不要讓用戶知道他們為什麼會被拒絕，不然在系統安全上會更容易被突破認証。你也可以將“required”改成“requisite”來修改認証方式。也就是說，如果有任何“requisite”模組驗證失敗返回，整個PAM認証就會終止再調用其它模組，並也以失敗返回，所以“required”跟“requisite”是不一樣的。
+
+第五行是表示任何必要的信息是要被記載的。例如，如果設置使用影子(shadow)口令，pam_db.so 模組就會被執行以檢查該帳戶是否失效或者使用者口令是不是超期而需要修改。
+
+第六行用以指定如果login驗證程序改變使用者的口令時，它會執行 pam_pwdb.so來完成。這只有在auth模組檢測到口令需要被改變時，才會執行，比如說一個影子口令已經過期時才會使用。
+
+最後一行表示pam_pwdb.so模組將被用來管理現在的會話過程。而目前這個模組什麼也不做﹔它可以被替換為別的所需的模塊。
+
+在這裡，我們要強調配置文件中每一行的順序不是隨意的。就算required模組以何種順序被執行並無多大關系，但是還有其它一些控制需要注意，其中optional很少在Red Hat使用，而 sufficient 和requisite就要求執行的順序不能顛倒。
+
+讓我們來看一下rlogin的認証配置：
+
+auth required /lib/security/pam_securetty.so
+
+auth sufficient /lib/security/pam_rhosts_auth.so
+
+auth required /lib/security/pam_pwdb.so shadow nullok
+
+auth required /lib/security/pam_nologin.so
+
+這和login的內容極為相同，但是在其中比login多一行模組敘述，而且模組的順序也不同。首先，pam_securetty.so模組將禁止以root的身分從不安全的地方登入。這將會有效的阻止任何想要以root身分登入的情形發生。如果您不想禁止這種情形的話，只要把這一行刪掉就可以了。然後，pam_nologin.so 模組將檢查/etc/nologin，第三點，如果pam_rhosts_auth.so模組如果認証通過，PAM就立即以成功返回就不再做任何口令驗證。如果pam_rhosts_auth.so認証失敗，這次失敗將會被忽略，繼續執行pam_pwdb.so模組以進行正常的口令驗証。如果在securetty認証失敗以後不想讓系統繼續以口令詢問的話，可以把pam_securetty.so模組的required 改為 requisite。
+
+1.5.1 範例解說及修改
+
+如果系統考慮到安全性的問題，那這個系統最好有適當的OTHER配置，以下是一個較誇張的設定(我們強烈建議你在一個不會為害到系統機制的地方作測試)
+
+#
+
+# default; deny access
+
+#
+
+OTHER auth required /usr/lib/security/pam_deny.so
+
+OTHER account required /usr/lib/security/pam_deny.so
+
+OTHER password required /usr/lib/security/pam_deny.so
+
+OTHER session required /usr/lib/security/pam_deny.so
+
+再強調一次，基於安全性的的問題，這不是非常贊成的去錯誤配置系統，因為我們是在作測試，上面的例子是很脆弱的將每個人鎖在外面，是不安全的。
+
+pam_deny這個模組並不複雜.以上面範例而言，當它被呼叫時，它不會記錄一些相關訊息，除非當使用者執行一個服務程式失敗時，使用者去聯繫系統管理者。
+
+在下面的範例，我們附加一些行述，應該可以適當提供系統管理者一些警告訊息
+
+#
+
+# default; wake up! This application is not configured
+
+#
+
+OTHER auth required /lib/security/pam_warn.so
+
+OTHER password required /lib/security/pam_warn.so
+
+我們將上述的兩行加至/etc/pam.d/other這個檔案中，如下所示：
+
+#
+
+# default configuration: /etc/pam.d/other
+
+#
+
+auth required /lib/security/pam_warn.so
+
+auth required /lib/security/pam_deny.so
+
+account required /lib/security/pam_deny.so
+
+password required /lib/security/pam_warn.so
+
+password required /lib/security/pam_deny.so
+
+session required /lib/security/pam_deny.so
+
+這樣一來就能達到以上的要求。
+
+在通常的情況下，這樣做將會提供一個地方給多數的應用程式啟動，但遺憾的是，並不是每個都是這樣，接下來我們要來介紹，當你要啟動anonymous-ftp時，你應該要附加哪些行述.在以下這個範例中，我們要警告學員的是，有可能在你的fpt server 中，有可能因為某些理由，這些行述會被改變，或是應用程式根本就不為有所變化，在/etc/pam.d/ftp範例如下：
+
+#
+
+# ftpd; add ftp-specifics. These lines enable anonymous ftp over
+
+# standard UNIX access (the listfile entry blocks access to
+
+# users listed in /etc/ftpusers)
+
+#
+
+auth sufficient /usr/lib/security/pam_ftp.so
+
+auth required /usr/lib/security/pam_unix_auth.so use_first_pass
+
+auth required /usr/lib/security/pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ftpusers
+
+在這裡我們要注意如果預設被ftp忽略掉，上述的第二行就是必要要加上的。另外我們要注意sufficient的使用，這裡它是定義的。如果這個模組去驗證使用者，那就忽略掉隨後的auth模組.同時也要注意use_first_pass
+
+這個參數的使用，它是命令Unix驗證模組去信任一個已經藉由ftp模組獲得驗證的使用者。
+
+原始連結:
+http://mouse.oit.edu.tw/PAM.htm
+
+
+----------------------------------------------------------------------------------------------------
+
+* 善用 PAM --讓特定 帳號 由特定 IP 登入
+
+ 
+
+
+作者 : ADJ網路實驗室
+
+一.前言
+
+不曉得各位是否曾有過這樣的需求...今天...有一個帳號或者多個帳號...我想要讓它只可以從特定 IP或者多個指定 IP 登入...不管是SSH or Ftponly 的使用者...基於某種特殊的考量...我只能讓它限制在特定的 IP 登入...如果是您...會怎麼做呢?
+
+其實有這種需求的...個人覺得對 Ftponly 的帳號比較需要...因為FTP 的帳號是使用明碼的方式...一旦您在傳輸封包的過程中被人截走...假設對方有能力得知您的帳號密碼...偏偏這個帳號是您們公司與分公司資料傳輸的共用帳號或者重要帳號...這時...若能夠加上只能由特定IP (如分公司 IP) 登入...想想這樣的安全性應該又高了一點...即使讓對方得知...應該也沒有立即性的危險...
+
+當然...要做這樣的限制...可能有人會想到 TCP_Wrapper...不過這只能針對 IP 或 Domain...可能也會想到利用 ftpaccess來限制...不過我試著來做..一樣只能限制 domain or IP... 要是有人能夠想到更簡單的方式...也歡迎跟大家分享...目前我使用的方式是用 PAM 的方式...
+
+二.準備
+
+測試系統: Red Hat Linux 7.3
+
+所需套件: 一般來講...wu-ftpd 跟 sshd run 起來就可以
+
+三.開始實做
+
+1.利用PAM的 access.conf﹕
+
+我們一開始要先將 pam_access.so 加入 system-auth 裡面...讓這個 shell object 可以生效
+
+[root@mondeo root]# cd /etc/pam.d
+[root@mondeo pam.d]# vi system-auth
+
+auth required /lib/security/pam_env.so
+auth sufficient /lib/security/pam_unix.so likeauth nullok
+auth required /lib/security/pam_deny.so
+
+account required /lib/security/pam_unix.so
+account required /lib/security/pam_access.so <==加入這一行
+
+password required /lib/security/pam_cracklib.so retry=3 type=
+password sufficient /lib/security/pam_unix.so nullok use_authtok md5 shadow
+password required /lib/security/pam_deny.so
+
+session required /lib/security/pam_limits.so
+session required /lib/security/pam_unix.so
+
+[root@mondeo pam.d]#
+
+2.修改hosts來指定特定 IP﹕
+
+因為 access.conf 只能認 hosts.... 所以我們增加特定IP給它...
+
+[root@mondeo root]# vi /etc/hosts
+127.0.0.1 localhost.localdomain localhost
+192.168.0.1 happy
+192.168.0.2 song
+192.168.0.3 kaohsiung
+192.168.1.1 taipei
+
+[root@mondeo root]#
+
+3.修改access.conf 來讓特定帳號只能從特定IP登入﹕
+
+假設系統裡面有abc 跟 def 兩個帳號..它們都有權限可以登入系統...今天我要限制讓這兩個帳號只能從 kaohsiung and taipei 登入...這時..我可以在 /etc/security/access.conf 來加入這一行...當然如果您還有其它需求...裡面的有一些 Sample...可以自行修改...
+
+[root@mondeo root]# cd /etc/security
+[root@mondeo security]# vi access.conf
+
+.
+.
+.
+# permission : users : origins
+# The first field should be a "+" (access granted) or "-" (access denied)
+# character.
+
+-:abc def:ALL EXCEPT kaohsiung taipei <-- 重點在這一行
+
+[root@mondeo security]#
+
+- : 就是Deny 的意思..使用者是 abc and def ...讓這兩個帳號拒絕所有連線...除了 kaohsiung and taipei
+
+這個只要設定好之後...就會馬上生效...
+
+經過這樣的步驟...再加上你的Firewall Rule...是不是讓你覺得整個 System Security 有更深一層的防護呢?
+
+
+----------------------------------------------------------------------------------------------------
+
+* 如何限制同一個 user 在同一時間只能有一個被允許登入
+
+> > 如何限制同一個user在同一時間只能有一個被允許登入
+> > 謝謝你的回答!
+> 
+>   RedHat、Mandrake、OpenLinux 這類系統，可以使用 pam 機制。
+> 
+>   首先您的系統必須把 pam_limits.so 的檔案掛入使用:
+>   修改 /etc/pam.d/login 檔案，加入:
+> 
+>    session    required     /lib/security/pam_limits.so
+> 
+>   然後 /etc/security/limits.conf 檔案內加入:
+> 
+>   kenduest  -   maxlogins   1
+> 
+>   OK... 那往後 kenduest 這位使用者就只能夠被限制同時只能夠 telnet
+>   1 次login 到系統內。
+> 
+>   相關資源的限制，參考一下 /etc/security/limits.conf 檔案上面的
+>   使用範例即可。另外建議多看看 /usr/doc/pam* 目錄內的 pam 文件檔案，
+>   真的是可以讓您的系統有更多的功能 :)
+
+----------------------------------------------------------------------------------------------------

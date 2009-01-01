@@ -1,0 +1,119 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* service pcmcia start 未載入 pcmcia_core
+
+	若是 RedHat 系統請檢查 /etc/sysconfig/pcmcia, 裡面的 PCMCIA 要設成 yes 才會啟動 PCMCIA. 另外要在 PCIC 指定用哪個 Socket Service 模組, 一般與 Intel 82365 相容的(含我目前用的 Ricoh RL5C475). 另外, 若是相容於 tcic 的要用 tcic 模組.
+
+	若 PCMCIA 設成 no 執行 service pcmcia start 不會看到任何訊息, 也不會載入 pcmcia_core (Card Services)
+
+----------------------------------------------------------------------------------------------------
+
+* 測試 Buffalo PCI 轉 PCMCIA/CardBus 界面卡
+
+	測試這張卡時真是花了很多時間。 首先， linux kernel 的 PCMCIA/CardBus Support 要關掉， 改用 pcmcia-cs 內建的 Card Services。 另外測試時發現 /proc/interrupt 被該卡使用的 IRQ 發生中斷的次數一直保持在零。 在 bios 中把 midi 關閉後才正常(原因不明， 只知道在這張板子上 pci 轉 pcmcia 卡用到的 irq 會和 midi 用到的一模一樣)。
+
+	最後， 在 /etc/sysconfig/pcmcia 內的 PCIC_OPTS=irq_mode=0 不管 irq_mode 是設成 0 或 1 均可正常動作 (0: PCI Interrupt/1: ISA Interrupt/2: Serial IRQ 不知道是什麼東東。 可參考 i82365 的 man pages)。
+
+	經過上述設定後， 不管是用 pcmcia-cs 內的 ORiNOCO 還是 linux-wlan-ng 的驅動程式均可正常驅動 Senao SL-2511CD Plus。 但是 DLink DFE690TXD (CardBus 網路卡) 則還沒有測出來。
+
+----------------------------------------------------------------------------------------------------
+
+* 如何得知有哪兒 pcmcia driver 被載入
+
+	cat /proc/bus/pccard/drivers
+
+	另外， cat /proc/bus/pccard/00/status 可以得知 socket 0 的狀態。 依據類推。
+
+----------------------------------------------------------------------------------------------------
+
+* 手動製做 CIS (Card Information Structure) 的方法
+
+	1. 找一台可以讀取的到 PCMCIA/CardBus 卡的機器
+	2. dump_cis -v > foobar.txt 産生出來的 foobar.txt 樣子長的如下所示：
+
+offset 0x02, tuple 0x01, link 0x03
+  00 00 ff 
+dev_info
+  NULL 0ns, 512b
+
+offset 0x07, tuple 0x17, link 0x04
+  67 5a 08 ff 
+attr_dev_info
+  SRAM 500ns, 1kb
+
+offset 0x0d, tuple 0x1d, link 0x05
+  03 67 5a 08 ff 
+
+offset 0x14, tuple 0x15, link 0x50
+  05 00 49 4e 54 45 52 53 49 4c 00 48 46 41 33 38 
+  34 78 2f 49 45 45 45 00 56 65 72 73 69 6f 6e 20 
+  30 31 2e 30 32 00 00 00 00 00 00 00 00 00 00 00 
+  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ff 
+vers_1 5.0, "INTERSIL", "HFA384x/IEEE", "Version 01.02", ""
+
+offset 0x66, tuple 0x20, link 0x04
+  56 01 02 00 
+manfid 0x0156, 0x0002
+
+offset 0x6c, tuple 0x21, link 0x02
+  06 00 
+funcid network_adapter
+
+offset 0x70, tuple 0x22, link 0x02
+  01 07 
+lan_technology wireless
+
+offset 0x74, tuple 0x22, link 0x05
+  02 40 42 0f 00 
+lan_speed 1 mb/sec
+
+offset 0x7b, tuple 0x22, link 0x05
+  02 80 84 1e 00 
+lan_speed 2 mb/sec
+
+offset 0x82, tuple 0x22, link 0x05
+  02 60 ec 53 00 
+lan_speed 5 mb/sec
+
+offset 0x89, tuple 0x22, link 0x05
+  02 c0 d8 a7 00 
+lan_speed 11 mb/sec
+
+offset 0x90, tuple 0x22, link 0x02
+  03 07 
+lan_media 2.4_GHz
+
+offset 0x94, tuple 0x22, link 0x08
+  04 06 00 02 6f 00 00 01 
+lan_node_id 00 02 6f 00 00 01
+
+offset 0x9e, tuple 0x22, link 0x02
+  05 01 
+lan_connector Closed connector standard
+
+offset 0xa2, tuple 0x1a, link 0x07
+  03 01 e0 03 00 00 01 
+config base 0x03e0 mask 0x0001 last_index 0x01
+
+offset 0xab, tuple 0x1b, link 0x10
+  c1 01 19 77 b5 1e 35 b5 3c 36 36 05 46 7f ff ff 
+cftable_entry 0x01 [default]
+  Vcc Vnom 3300mV Vmin 3V Vmax 3600mV Iavg 300mA
+  Ipeak 300mA Idown 10mA
+  io 0x0000-0x003f [lines=6] [16bit]
+  irq mask 0xffff [level] [pulse]
+
+	3. 用十六進制編輯器依下列步驟産生 CIS (假設檔名為 foobar.dat)
+		a. 輸入 tuple 後方資料
+		b. 再輸入 link 後方資料
+		c. 再來將下一列開始的十六進制資料全部依樣畫葫蘆輸入
+		d. 換下一個 tuple 跳到步驟 a；當全部 tuple 都輸入完到下一步驟
+		e. 再多加 0xFF 0x00 表示 CIS 結束 (結束用 tuple)
+
+	4. 用 dump_cis -fvi foobar.dat 檢查輸出結果是否正確。
+
+	註： 其實也可以用 dump_cis 及 pack_cis 這兩個 pcmcia-cs 內附的工具來做， 但是 pack_cis 似乎版本有點舊， 無法識別部份由 dump_cis 輸出的資料， 只好自己想出這個方法了。
+
+----------------------------------------------------------------------------------------------------

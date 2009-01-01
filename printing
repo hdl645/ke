@@ -1,0 +1,500 @@
+vim:ts=4:tw=1024:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 中文列印的參考文件
+
+	強烈建議參考 FreeBSD Chinese HOWTO, 寫的非常詳盡
+
+	http://freebsd.sinica.edu.tw/zh-tut/print.html
+
+----------------------------------------------------------------------------------------------------
+
+* 如何設定 CUPS
+
+	自從更新到 Fedora Core 1 後, redhat-config-printer* 會一直出現寫入 wait queue 錯誤. 因此決定改用 cups. (印表機為 KyoceraMita FS-1010)
+
+	把光碟中 *cups* *matic* 全部裝起來
+	
+	在 www.linuxprinting.org/download/PPD/Kyocera/4.8.1/FS-1010.ppd 找到定義檔, 用 gzip 壓縮後複製到 /usr/share/cups/model
+
+	service cups start
+
+	用瀏覽器連到 localhost:631 選擇 Do Administration Tasks, 並輸入 root 的帳號及密碼
+
+	add printer, 其中 Name, Location, Description 都是給人看的, 清楚就好. 選 continue
+
+	再來選擇最後一個 Windows Printer via SAMBA
+
+	Device URI 輸入 smb://USERNAME:PASSWORD@140.118.123.180/印表機共享名稱, 以 mpp17 的印表機來說即為:
+
+		smb://Administrator:prontust810-2@140.118.123.180/KyoceraM
+
+	Make 選擇 Kyocera Mita
+
+	Model 選擇 Kyocera Mita FS-1010 (en)
+
+	這時應該會出現印表機已經設定好, 點一下印表機後再點 Configura Printer 看有沒有什麼要設定的.
+
+	都ok的設就可以點 Print Test Page 了. 若沒印出可以看一下 Printer State 的訊息. 像我剛開始設定時未指定使用者名稱及密碼, 會出現 NT_XXXXXX_DENIED
+
+	註: 目前只知道如何印測試頁, 而且ok. 其它軟體還不知道如何印.
+
+----------------------------------------------------------------------------------------------------
+
+* 用 kprinter 列印
+
+	kprinter, 畫面出來後右下角的列印系統選擇 cups 即可.
+
+----------------------------------------------------------------------------------------------------
+
+* 以 mozilla/firebird 列印
+
+	把列印命令(含後方參數)改成 lp.cups 或 lpr.cups 即可. 但是中文......都是方框 :'(
+
+	從網路上找來的方法1, 未測過
+
+Mandrake mozilla 中文列印
+
+
+
+Modify /usr/local/mozilla/defaults/pref/unix.js
+
+pref("print.postscript.nativefont.zh-CN", "BousungEG-Light-GB-GB-EUC-H");
+pref("print.postscript.nativefont.zh-TW", "ShanHeiSun-Light-B5-H");
+pref("print.postscript.nativecode.zh-CN", "gb2312");
+pref("print.postscript.nativecode.zh-TW", "big5");
+
+
+
+If your printing is not printed with gs  (ghostscript),  use the following script as the print command in mozilla.
+You have to modify '-sDEVICE=lj5gray' to match your printer.
+
+
+#!/bin/bash
+
+if [ $# -eq 0 ]; then
+  file="-"
+else
+  file=$1
+fi
+
+gs -dNOPAUSE -dBATCH -q -sDEVICE=lj5gray -sOutputFile=-  $file | lp
+
+
+	從網路上找來的方法2, 未測過
+
+一個很簡單讓您的mozilla可以列印中文的方法
+
+1.下載
+wprint
+
+2.安裝wprint
+tar xzvf wprint-2.04.tar.gz
+./configure
+make
+make install
+
+3.編輯 /etc/wprint.conf
+將底下兩行加入
+fontpath:/usr/share/fonts/zh_TW/TrueType/
+default:EUC-TW:bkai00mp.ttf=zh_TW.Big5:|lpr -P printer_name
+其中fontpath請依您個人需求修改，printer_name請改為您系統的印表機名稱
+
+4.修改mozilla的印表機屬性
+請選擇『檔案』下拉選單的『列印』-> 點選『印表機』右側的『屬性』鍵 -> 將 『列印命令』由原來的『lpr ${MOZ_PRINTER_NAME:+'-P'}${MOZ_PRINTER_NAME}』改為『wprint』
+
+5.試印看看
+
+
+
+	從網路上找來的方法3, 未測過
+
+現在的中文列印
+statue freebsd-taiwan-chinese@freebsd.sinica.edu.tw
+03 Jun 2002 06:18:58 GMT
+
+    * Previous message: [thhsieh@linux.org.tw: [Cle-devel] About Li18nux]
+    * Next message: fonts.dir
+    * Messages sorted by: [ date ] [ thread ] [ subject ] [ author ]
+
+http://freebsd.sinica.edu.tw/~statue/index.php?file=20020527
+
+現在的中文列印
+  目前的中文顯示已經算是完備，我們平常需求的粗體與斜體都能正常顯示，
+  利用 -medium-r 對應普通字型，-bold-r 對應粗體，-medium-i 對應斜體，
+  -bold-i 對應粗斜體。
+
+  由於 print/ghostscript-gnu 從 6.53 升級到 7.05，相對應的
+  chinese/ghostscript6 與 print/ghostscript-gnu-cjk(gs-cjk) 也都 BROKEN，
+  中文列印就成了一個問題，不過，原來 gs-cjk 已經融入 7.05，
+  而且增加的方式更是簡單，以下用 mozilla 的中文列印來說明
+  只要修改 /usr/local/share/ghostscript/7.05/lib/CIDFnmap 最後增加
+
+=== start file ===
+(CIDFnmap.zh) .runlibfile
+=== end file ===
+
+  接著新增 /usr/local/share/ghostscript/7.05/lib/CIDFnmap.zh
+
+=== start file ===
+% Chinese Truetype Fonts (Arphic)
+/ZenKai-Medium          (/usr/local/share/fonts/TrueType/bkai00mp.ttf) 1 ;
+/ShanHeiSun-Light       (/usr/local/share/fonts/TrueType/bsmi00lp.ttf) 1 ;
+%
+% Convenient aliases for PS files on Chinese PostScript printer
+%
+/B5-H                   /ZenKai-Medium          ;
+/ETen-B5-H              /ZenKai-Medium          ;
+/B5-H                   /ShanHeiSun-Light       ;
+/ETen-B5-H              /ShanHeiSun-Light       ;
+%
+% CID fontmap for chinese-big5 encoding CIDFontName
+%
+/MSung-Light            /ShanHeiSun-Light       ;
+/MHei-Medium            /ZenKai-Medium          ;
+/MOESung-Regular        /ShanHeiSun-Light       ;
+/MOEKai-Regular         /ZenKai-Medium          ;
+=== end file ===
+
+mozilla 僅有普通字體
+
+  接著修改 /usr/X11R6/lib/mozilla/defaults/pref/unix.js 最後增加
+
+pref("print.postscript.nativecode.zh-TW", "big5");
+pref("print.postscript.nativefont.zh-TW", "MSung-Light-B5-H");
+  用 mozilla 開網頁，選取列印，然後用 /usr/ports/print/gv 來觀看，
+  這樣子就會看到中文的 ps 囉
+
+  不過可以看到，並沒有粗體與斜體的相關設定，筆者在 CIDFnmap 並沒有找到
+  粗體與斜體的相關設定，不過這對 mozilla 而言是足夠的
+
+why MSung-Light
+
+  MSung-Light 與 MHei-Medium 則是許多軟體預設的 CID fontmap，
+  都把他連到 ShanHeiSun-Light 與 ZenKai-Medium
+
+  ShanHeiSun-Light 的來源是 ttfinfo /usr/local/share/fonts/TrueType/bsmi00lp.ttf
+  的 TTFINFO_FONT_PSNAME="ShanHeiSun-Light"
+
+TTFINFO_FONT_FILE="/usr/local/share/fonts/TrueType/bsmi00lp.ttf"
+TTFINFO_FONT_NAME="AR PL Mingti2L Big5"
+TTFINFO_FONT_PSNAME="ShanHeiSun-Light"
+TTFINFO_FOUNDRY_NAME="Arphic"
+TTFINFO_WEIGHT_NAME="medium"
+TTFINFO_WIDTH="normal"
+TTFINFO_NUMCMAP="2"
+TTFINFO_CMAP0="1,0"
+TTFINFO_CMAPNAME0="Apple,Roman"
+TTFINFO_CMAP1="3,1"
+TTFINFO_CMAPNAME1="Windows,Unicode"
+TTFINFO_MAPNUM="1"
+TTFINFO_FONTMAP1="-Arphic-AR PL Mingti2L Big5-medium-r-normal--0-0-0-0-c-0-big5-0"
+
+  目前已經有類似的 ports，/usr/ports/japanese/ghostscript-gnu-jpnfont/
+  剛我也 send-pr 去修改 /usr/ports/print/ghostscript-gnu-commfont 了
+
+測試
+% cat cid.ps
+/MSung-Light-B5-H findfont 60 scalefont setfont
+50 600 moveto (2002年 5月29日) show
+/MHei-Medium-B5-H findfont 60 scalefont setfont
+50 520 moveto (2002年 5月29日) show
+/MOESung-Regular-B5-H findfont 60 scalefont setfont
+50 440 moveto (2002年 5月29日) show
+/MOEKai-Regular-B5-H findfont 60 scalefont setfont
+50 360 moveto (2002年 5月29日) show
+showpage
+quit
+% gv -antialias cid.ps
+% ps2pdf cid.ps
+% xpdf cid.pdf (目前有問題!)
+
+  snapshot: http://freebsd.sinica.edu.tw/~statue/news/20020527.png
+
+  以下是 mozilla.ps 的 zh_TW 區段，mozilla 的列印正常
+
+=== start file ===
+/Unicode2NativeDictzh-TW 0 dict def
+/zh-TW_ls {
+  /NativeFont /MSung-Light-B5-H def
+  /UCS2Font /Courier def
+  /Unicode2NativeDict Unicode2NativeDictzh-TW def
+  /unicodeshow1 { real_unicodeshow } bind def
+  /unicodeshow2 { real_unicodeshow_native } bind def
+} bind def
+=== end file ===
+
+kword 仍然有問題
+
+  以下是 kword.ps 的 zh_TW 區段，kde3 的 kword 列印仍然有問題
+
+=== start file ===
+%%BeginSetup
+% Fonts and encodings used
+/MSung-Light-B5-HList [
+[ /MSung-Light-B5-H 1 0 ]
+  [ /MOESung-Regular-B5-H 1 0 ]
+  [ /Helvetica 1.18991 0 ]
+] d
+% Asian postscript font requested. Using MSung-Light-B5-H
+/MSung-Light-B5-HList [
+[ /MSung-Light-B5-H 1 0.2 ]
+  [ /MOESung-Regular-B5-H 1 0.2 ]
+  [ /Helvetica-Oblique 1.18991 0 ]
+] d
+% Asian postscript font requested. Using MSung-Light-B5-H
+/MSung-Light-B5-HList [
+[ /MSung-Light-B5-H 1 0 ]
+  [ /MOESung-Regular-B5-H 1 0 ]
+  [ /Helvetica-Bold 1.12803 0 ]
+] d
+% Asian postscript font requested. Using MSung-Light-B5-H
+/F1 30.375/MSung-Light-B5-H-Uni DF
+/F2 30.375/MSung-Light-B5-H-Uni DF
+/F3 30.375/MSung-Light-B5-H-Uni DF
+%%EndSetup
+=== end file ===
+
+  但是用 gs 來看就會有如下的錯誤訊息
+
+=== start msg ===
+GNU Ghostscript 7.05 (2002-04-22)
+Copyright (C) 2002 artofcode LLC, Benicia, CA.  All rights reserved.
+This software comes with NO WARRANTY: see the file PUBLIC for details.
+Can't find (or can't open) font file /usr/local/share/ghostscript/Resource/Font/MSung-Light-B5-H-Uni.
+Can't find (or can't open) font file MSung-Light-B5-H-Uni.
+Substituting font Courier for MSung-Light-B5-H-Uni.
+Loading NimbusMonL-Regu font from /usr/local/share/ghostscript/fonts/n022003l.pfb... 18883696 17394664 1743000 367192 0 done.
+Can't find (or can't open) font file /usr/local/share/ghostscript/Resource/Font/MSung-Light-B5-H-Uni.
+Can't find (or can't open) font file MSung-Light-B5-H-Uni.
+Substituting font Courier for MSung-Light-B5-H-Uni.
+Can't find (or can't open) font file /usr/local/share/ghostscript/Resource/Font/MSung-Light-B5-H-Uni.
+Can't find (or can't open) font file MSung-Light-B5-H-Uni.
+Substituting font Courier for MSung-Light-B5-H-Uni.
+>>showpage, press  to continue<<
+=== end msg ===
+
+fonts.dir 的粗體與斜體
+  回過頭來看 fonts.dir 的設定方式
+
+bsmi00lp.ttf             -Arphic-AR PL Mingti2L Big5-以下略
+ai=0.3:bsmi00lp.ttf      -Arphic-AR PL Mingti2L Big5-以下略
+ds=y:bsmi00lp.ttf        -Arphic-AR PL Mingti2L Big5-以下略
+ds=y:ai=0.3:bsmi00lp.ttf -Arphic-AR PL Mingti2L Big5-以下略
+
+  第一個是正常的字體。
+  ai 代表 Automatic Italic 會造成斜體。後面的數字是傾斜比例。
+  ds 代表 Double Strike 會造成偽粗體。y 代表 yes，表示要粗體。
+  兩個一起用就變成粗斜體了。
+
+  當然，以上在 ttfm 的模組應該都會自動產生，但也可以自己去手動
+  調整。也可以利用 fs=p 來調整成調合字(proportional font)。另外，
+  要使用 MS 的新細明，可以加上 eb=y 來強迫 FreeType 去使用內嵌
+  於字型內的點陣字(會比 AA 好看，不過這個功能不是很穩定)。
+
+gscjk 的粗體與斜體
+  以文鼎宋體為例，PSNAME 是 ShanHeiSun-Light，而我們常用的 CMap 是
+  ETen-B5-H，所以 gscjk 的字型就會有 'ShanHeiSun-Light-ETen-B5-H'、
+  'ShanHeiSun-Light-Bold-ETen-B5-H'、'ShanHeiSun-Light-Italic-ETen-B5-H'、
+  'ShanHeiSun-Light-BoldItalic-ETen-B5-H'，Bold 是粗體，Italic 是斜體，
+  BoldItalic 是粗斜體，這樣就有了我們常用的字體了。
+
+  接著，gscjk 就會在 /usr/local/share/ghostscript/Resource/CIDFont/
+  底下產生 ShanHeiSun-Light ShanHeiSun-Light-Bold ShanHeiSun-Light-BoldItalic
+  ShanHeiSun-Light-Italic，並在 /usr/local/share/ghostscript/Resource/Font/
+  底下產生與繁體中文 CMap 相結合的字型。
+
+  在此的產生方式是透過 ttfm.sh 的 gscjk module，可以直接使用 ports 中的版本，
+  檢察 /usr/local/share/ttfm 底下是否有 gscjk.ttfm 即可，ttfm 的使用方式
+  則自己參考 manual 或是網頁
+
+=== start file ===
+/ShanHeiSun-Light-B5-H findfont 60 scalefont setfont
+50 600 moveto (2002年 5月29日) show
+/ShanHeiSun-Light-Bold-B5-H findfont 60 scalefont setfont
+50 520 moveto (2002年 5月29日) show
+/ShanHeiSun-Light-Italic-B5-H findfont 60 scalefont setfont
+50 440 moveto (2002年 5月29日) show
+/ShanHeiSun-Light-BoldItalic-B5-H findfont 60 scalefont setfont
+50 360 moveto (2002年 5月29日) show
+showpage
+quit
+=== end file ===
+
+  snapshot: http://freebsd.sinica.edu.tw/~statue/news/20020527-2.png
+
+
+abiword 的粗體與斜體
+  abiword 也同樣的可以列印粗體與斜體。abiword 的字型目錄在
+  /usr/X11R6/share/AbiSuite/fonts，在其內先建立 zh-TW 目錄
+  接著只要利用 ttf 來建立 fonts.dir 就可以了。
+
+  格式如下：
+
+PSFONT, TTFFONT, 880, 120, 1000
+
+  所以就建立如下的 fonts.dir
+
+=== start file ===
+4
+ShanHeiSun-Light-ETen-B5-H, -Arphic-AR PL Mingti2L Big5-medium-r-normal--0-0-0-0-c-0-big5-0, 880, 120, 1000
+ShanHeiSun-Light-Bold-ETen-B5-H, -Arphic-AR PL Mingti2L Big5-bold-r-normal--0-0-0-0-c-0-big5-0, 880, 120, 1000
+ShanHeiSun-Light-Italic-ETen-B5-H, -Arphic-AR PL Mingti2L Big5-medium-i-normal--0-0-0-0-c-0-big5-0, 880, 120, 1000
+ShanHeiSun-Light-BoldItalic-ETen-B5-H, -Arphic-AR PL Mingti2L Big5-bold-i-normal--0-0-0-0-c-0-big5-0, 880, 120, 1000
+=== end file ===
+
+  利用 -medium-r 對應普通字型，-bold-r 對應 -Bold，-medium-i 對應 -Italic，
+  -bold-i 對應 -BoldItalic。
+
+  不過我都還必須在 zh-TW 底下 touch .already-in-fp，abiword 才不會說
+Abiword could not load the following font or fontset from the X Window System display server:
+  [-*-Times New Roman-regular-r-*-*-*-0-*-*-*-*-*-*]
+
+FYI
+http://www.cs.wisc.edu/~ghost/doc/gnu/7.05/CJK.htm
+  Usage of features to support CJK CID-keyed fonts in Ghostscript.
+http://www.cs.wisc.edu/~ghost/doc/gnu/7.05/CJKTTCID.htm
+  Note providing information on utilization of CJK (Chinese, Japanese and
+  Korean) TrueType fonts as CIDFontType2 fonts from the viewpoint of its
+  validity and limitations.
+--
+[1;32m※ Origin: [33m碩誠 Linux 資訊站 [37m<bbs.sayya.org> [m
+[1;31m◆ From: [36mu8-177.u203-204.giga.net.tw[m
+
+
+
+----------------------------------------------------------------------------------------------------
+
+* bg5ps
+
+	在 /etc/bg5ps.conf 有設定若檔案是big5/gb2312編碼時要用什麼字型, 設定好後(預設有arphic的字型):
+
+	1. 將文字檔轉成 ps 檔
+
+		big5ps -if input.txt -of output.ps
+
+	2. 將mozilla/firebird/netscape印好的ps檔的中文字轉換好(原來是方框)
+
+		以 LANG=zh_TW.Big5 啟動 mozilla/firebird/netscape
+		印出 mozilla.ps
+		bg5ps -nps y -if mozilla.ps -of output.ps
+
+		註: 若輸入的檔案為 ps 格式則要加上 -nps y
+
+	註: 經過測試, 在 Fedora Core 1 系統上, 啟動 mozilla 時, 轉出來的 ps 檔中文已經沒問題了. 不知道是 firefly 還是 redhat 有改過. 但是, 印到印表機還是一樣都是方框
+
+----------------------------------------------------------------------------------------------------
+
+* Adobe AcrobatReader
+
+	將印列命令從 lpr 改成 lpr.cups 即可. 而且中文pdf文件沒問題(以 Debian Reference Manual 第一頁測試)
+
+	註: 中文pdf文件似乎僅限於別人轉好的, 猜想可能是我的系統已經轉到 UTF-8, 導致用mozilla/firebird印出的ps再用bg5ps轉出來的pdf雖然可以在電腦上看, 但是印出來是亂碼(看起來像是big5及utf8在另一種編碼系統下顯示出來的樣子). 測試條件如下:
+
+		1. 直接開啟 firebird 印出 mozilla.ps, 用 ps2pdf 轉成 pdf 檔, 用 acrobat 看會說有字型找不到. 顯示正常, 但列印出來為亂碼.
+
+		2. 將 LANG, LC_CTYPE 改成 zh_TW.Big5 後啟動 mozilla (firefly版), 印出 mozilla.ps, 用 ps2pdf 轉成 pdf 檔, 用 acrobat 看會說有字型找不到, 顯示正常, 但列印出來為亂碼.
+
+----------------------------------------------------------------------------------------------------
+
+* wprint
+
+	先用 mozilla 將yam的首頁(含中文字)印一頁到 ~/mozilla.ps
+
+	以 gv 瀏覽, 中文皆為方框
+
+	修正 /etc/wprint.conf 內的 fontpath 後方路徑為 /usr/share/fonts/ttf/ (最後要加上/不然會找不到字型檔)
+
+	註: 一定要是真的字型檔, 若該字型檔是 symbolic link 似乎不行
+
+	wprint -l big5 -p mozilla.ps 可以印出中文字, 但是出現一大堆 E
+
+	wprint -l uni -p mozilla.ps 印出的內容和上述一樣, 可能字型檔都指定成 DFSongSd.ttf 的關係
+
+	修改 /etc/wprint.conf, 把 big5 採用的字型改成 bkai00mp.ttf (文鼎繁體楷書字型)
+
+	修改 mozilla/firebird, 把列印命令改成 wprint -l big5 並試印 http://freebsd.sinica.edu.tw/zh-tut/wprint.html (中英文混雜的網頁), 結果部份英文字會變成像是經過mime編碼過的文字.
+
+	修改列印命令成 wprint -l uni 並試印同一網頁, 亂掉的英文字沒有改善, 反而是正常的英文字字距加寬了.
+
+	wprint -l big5 -p mozilla.ps 除了字型變成楷書外, 還是出現一大堆 E
+
+	改用 firebird, 列印指令為 wprint -l big5 中英文皆正常. 該 firdbird 不是 firefly 版. 而上述的 mozilla 是 1.6 firefly 版.
+
+	用 firebird 列印 yam 首頁, 也沒有出現一大堆 E 的問題.
+
+	註:把 mozilla 降級到 1.5-6 firefly 版後, 印上述中英文混雜的網頁, 英文都ok; 不過英文有些地方會莫明奇妙多出一些空白, 用 firebird 印也是有同樣問題. 不過, 比起以前都是方框好多了.
+
+	註: -l 表示要取用 /etc/wprint.conf 內指定的 entry
+
+	註: -p 表示要用哪個 PS 檔案
+
+	註:目前/etc/wprint.conf設定值, 其中 kyocera 是印表機名字, 而 lpr 是連到 lpr.cups 的 Symbolic Link
+
+	fontpath:/usr/share/fonts/ttf/
+	uni:UTF-8:DFSongSd.ttf:|lpr -P kyocera
+	unic:UTF-8:DFSongSd.ttf:|lpr -P kyocera
+
+	fontpath:/usr/share/fonts/ttf/
+	big5:EUC-TW:bkai00mp.ttf:|lpr -P kyocera
+	big5l:EUC-TW:DFSongSd.ttf:mybig5.ps
+	default:NONE:NONE:|lpr -P kyocera
+
+----------------------------------------------------------------------------------------------------
+
+* ghostscript 與 Acrobat Reader
+
+	今天用 Acrobat Reader 5.08 linux 版看一份簡體中文的pdf文件, 該文件用的是 SimSun 字型, 但是沒有內嵌. 使用 acrobat reader 會因為找不到 SimSun 字型, 導致畫面上一大堆點. 反之, 用 ghostview 就很正常, 而且可以列印出簡體中文.
+
+----------------------------------------------------------------------------------------------------
+
+* 讓 MOZILLA 直接列印中文
+
+	從網路上看來的, 還沒測試過
+
+		只要在mozilla中啟用freetype2就可以直接使用truetype來列印了
+		方法：
+		1)
+		確定FreeType2 library可以用(testing跟unstable應該都有吧？)
+		2)
+		在網址列打about:config
+		找到font.FreeType2.enable跟font.FreeType2.printing把它設為true
+		(如果沒有這兩項的話可能是沒編進去)
+		3)
+		按右鍵新字串(string)，新增font.directory.truetype.number，其中number是數字如1,2...
+		內含值則是字型的路徑如/usr/share/fonts/truetype/arphic/，可以有多個不同的路徑設定(number不同)
+		4)
+		列印看看...中文啊~~真高興
+		
+		詳情請看
+		http://www.mozilla.org/projects/fonts/unix/enabling_truetype.html
+
+	在 Fedora Core 1, mozilla 1.6 firefly 版上測試, 執行以下動作後還是只印出方框 :'(
+
+		font.FreeType2.enable ==> true
+		新增 font.directory.truetype.1 ==> /usr/share/fonts/ttf
+
+	會印出方框的原因搞不好是因為 firefly 版的 mozilla 並沒有打開 freetype2 的支援。
+
+	修改 mozilla 1.6 firefly 的 spec 檔， 把 --disable-freetype2 --disable-xprint 都 enable 後重做 rpm， 安裝該rpm
+
+		1. 直接選擇預設的 postscript 印表機， 用 lpr 命令列印 ==> 中文還是為方框 :'(
+		2. 改用 xprint 的印表機 ==> 會出現一些錯誤訊息， 而且未列印
+		
+
+----------------------------------------------------------------------------------------------------
+
+* 純文字檔的列印
+
+	1. 純英文
+		
+		lpr 檔名 
+
+	2. 含 Unicode 編碼的繁體中文字
+
+		用 firebird/mozilla 開啟後, 將編碼換成 UTF-8, 以:
+
+			wprint -l big5 或
+			wprint -l uni  皆可正常印出中文
+
+----------------------------------------------------------------------------------------------------

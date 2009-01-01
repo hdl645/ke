@@ -1,0 +1,126 @@
+vim:enc=utf8:tw=0:ts=4
+----------------------------------------------------------------------------------------------------
+
+來源:在Linux7.2上安裝Efax，收發傳真
+
+by Mark Nielsen
+
+
+目的
+我打算建一個fax服務器。我想過使用HylaFax，但是我的RedHat系統已經有了 mgetty，安裝HylaFax rpm的時候會發生沖突。好像如果我能正確使用mgetty的話，我還可以通過mgetty做登錄（譯注：也許指撥號），進行voice和fax操作。現在， 我想的是通過RedHat 7.2 的默認安裝，而不需要任何附加軟件就可以接收傳真。
+
+Efax和fax其實是一回事，fax是一個調用efax的腳本。
+
+
+文件配置
+有兩個文件你需要配置：/usr/bin/fax和/etc/inittab。
+復制/usr/bin/fax到/usr/bin/fax_custom，然後我修改了以下幾行：
+
+FAXDIR=/var/spool/fax/incoming
+NAME="AudioBoomerang.com Computer Fax Server"
+FROM="+1 111 222 3333"
+ANSFNAME="fax_%Y%m%d_%H%M%S"
+
+在/etc/inittab中, 我的修改如下:
+
+S0:2345:respawn:/bin/sh /usr/bin/fax_custom answer
+
+
+Efax和fax -- 單個接收
+如果你知道有人要給你發傳真，你可以單個的接收它，執行一下命令：
+efax -d /dev/ttyS0 -l "268 1162" -c 1,5 -r reply
+
+或者
+fax answer
+
+如果你不想fax掛在後台等待下個傳真連接，那麼就不要進行我在“文件配置” 一節提到的對/etc/inittab的修改。
+
+
+Efax 和 fax -- 通過inittab多重接收
+如果你象我在“文件配置”一節說的那樣修改/etc/inittab，那麼只要重啟機器，你 的modem就會自動接收fax，並將內容輸出到/var/spool/fax/incoming目錄。
+如果你執行下面的命令：
+
+ps auxw | grep efax
+
+你會看到efax在後台運行，象這樣：
+root 1698 0.0 0.4 1576 616 ? S< 21:47 0:00 /usr/bin/efax -v -v chewmainrxtf -d/dev/modem -iZ -i&FE&D2S7=120 -i&
+非常好的是，如果你殺死進程1689，它會自動在後台再次運行，我相信，會 重新讀取/usr/bin/fax_custom文件。於是，如果你對這個文件進行了修改的話， 只要 在你為了測試配置試圖發送傳真之前殺死efax進程就可以了。
+
+
+收到傳真以後怎麼辦？
+運行一個cron的任務(job)，用來將/var/spool/fax/incoming裡的文件分類，為每組 傳真創建一個lock文件，然後或者將它們轉換成pdf格式以便網上瀏覽，或者直接將它們 打印出來。
+如果你想把傳真打印出來,操作如下：
+
+efix -ops fax_20020606_014847.001 | lpr
+
+建議你打印文件後將它保存在一個備份的目錄裡。
+
+
+發送傳真
+安裝打印服務比我原先想的要麻煩。首先，按照幫助說的做（有一點變動）：
+ln /usr/bin/fax /usr/bin/faxlpr
+
+在 /etc/printcap.local 文件中，
+fax:lp=/dev/null:sd=/var/spool/fax:if=/usr/bin/faxlpr_perl:
+
+mkdir /var/spool/lpd/fax
+touch /var/spool/lpd/fax/lock
+
+/etc/rc.d/init.d/lpd restart
+
+我還做了些變動：
+
+在 /usr/bin/faxlpr中, 我修改
+l=`$FAX send "$num" fax$$`
+為
+
+`gs -q -sDEVICE=tiffg3 -dNOPAUSE -sOutputFile=fax_out fax$$ l=`efax -t $num fax_out`
+`rm fax_out`
+
+還修改了以下三行：
+num=` echo "$cfile" | sed -e /^[^J]/d -e s/..//`
+host=`echo "$cfile" | sed -e /^[^H]/d -e s/..//`
+user=`echo "$cfile" | sed -e /^[^P]/d -e s/..//`
+
+我保存了如下的一個/usr/bin/faxlpr_perl腳本，並chmod 755 /usr/bin/faxlpr_perl:
+#!/usr/bin/perl
+
+my $String = "";
+foreach my $Arg (@ARGV)
+{
+if ($Arg =~ /-j/)
+{
+my $Copy = $Arg;
+$Copy =~ s/-j//;
+open(FILE,">lock"); print FILE "hfA$Copy"; close FILE;
+}
+}
+my $Command = "/usr/bin/faxlpr";
+system ($Command, @ARGV);
+print 1;
+
+我很討厭這一步，但是我不得不"chmod 666 /dev/ttyS1"，以便 控制打印工作的lpr用戶可以使用modem。
+那個perl腳本使faxlpr可以找到進程號，修改"fax"命令為"efax"也是 必要的，因為它試圖創建lock文件，而我並不想這樣。
+
+我相信我的發送傳真的方法會破壞lock文件，這樣如果你在接受傳真的時候發送傳真 可能會導致錯誤。
+
+經過這些痛苦之後，你的打印程序還需要可以指定"-J"選項，能夠象這樣 使用：lpr -P fax -J "555 1212" file.ps。 否則,就打印到文件，然後 用行命令將文件打印出來。
+
+你也可以只使用efax命令發送傳真，而不必通過打印服務。不過，你得在發送之前 使用 gs將傳真轉換一下格式，這也是很痛苦的事情。
+
+
+結論
+如果有機會的話，我會嘗試我是否可以：
+使用samba和mgetty發送傳真。我會在inittab中用mgetty代替/usr/bin/fax_custom， 這樣我就可以方便的接收和發送傳真。使用efax接收和手動發送傳真都還可以，不過要通過打印服務 發送的話就很痛苦了。
+我還想看看是否可以使用mgetty做語音和登錄(login sessions)方面的事情，而不僅僅是傳真。
+Efax是我在解決mgetty的問題（我試過，但是失敗）之前的一個臨時方法。我不用hylafax的唯一原因是安裝它的rpm包時和mgetty沖突，然後我對mgetty發生興趣，接著轉向efax。我正在嘗試將來使用mgetty，因為我還想使用同一個modem做語音和登錄方面的事情。好像可以做到這些，不過好像有些modem不能正確的檢測fax,voice,login。我真的不情願用efax和打印服務發送傳真。
+
+
+參考
+The Easy Fax Server!
+A Linux Fax Server for a Windows Network
+Linux Fax for Dummies
+Hylafax
+Article Version 1.2 : Date Last Changed Thu Jun 13 04:17:31 2002
+
+----------------------------------------------------------------------------------------------------

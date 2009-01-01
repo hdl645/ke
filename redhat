@@ -1,0 +1,51 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* RedHat 新增的設定命令 (在/usr/bin)
+
+	redhat-config-date			: 設定時間及時區, 還可以設定由ntp伺服器更新時間
+	redhat-config-httpd			: 設定apache伺服器的連線數等等
+	redhat-config-keyboard		: 設定系統的鍵盤是哪一國的
+	redhat-config-language		: 設定系統預設語系
+	redhat-config-mouse			: 設定滑鼠廠牌, 按鍵數. 可惜還不能設定滑鼠游標
+	redhat-config-network		: 設定網路ip, 閘道器, /etc/hosts 檔
+	redhat-config-network-cmd	: 無法執行, 看檔名應該是命令界面設定網路程式
+	redhat-config-network-druid: 設定系統要新增的連線, 目前支援: CIPE (VPN), 乙太網路, isdn, 數據機, token ring, 無線網路, xDSL.
+	redhat-config-nfs				: 設定 /etc/exports 內項目
+	redhat-config-packages		: 新增/移除套件
+	redhat-config-printer		: 設定印表機
+	redhat-config-printer-gui	: 和上一個相同
+	redhat-config-printer-tui	: 文字視窗下設定印表機
+	redhat-config-proc			: 設定核心內部的參數, 看不懂:(
+	redhat-config-rootpassword	: 設定系統管理員的密碼
+	redhat-config-securitylevel: 設定防火牆的工具, 可惜不像mandrake的設定工具還可以額外設定整個系統的安全性
+	redhat-config-services		: 編輯各runlevel要啟動的服務, 並可以直接開始, 停止, 重新啟動服務
+	redhat-config-soundcard		: 偵測/設定音效卡驅動程式, 可惜無法看出支援哪些音效卡
+	redhat-config-time			: 同 redhat-config-date
+	redhat-config-users			: 管理使用者及群組
+	redhat-config-xfree86		: 設定 X Window 的解析度, 顏色數, 螢幕類型, 掃瞄頻率, DPI(實體解析度), 顥示卡驅動程式等.
+
+----------------------------------------------------------------------------------------------------
+
+* 控制磁碟空間檢查
+
+	修改 /etc/diskcheck.conf 中的 defaultCutoff 等參數. 詳細說明請參考: 
+		
+		http://www.hk.redhat.com/docs/manuals/linux/RHL-9-Manual-TW/custom-guide/index.html 內的 
+		http://www.hk.redhat.com/docs/manuals/linux/RHL-9-Manual-TW/custom-guide/s1-sysinfo-filesystems.html
+
+----------------------------------------------------------------------------------------------------
+
+* 擷取安裝時的畫面
+
+	取自 http://phorum.study-area.org/viewtopic.php?t=21476
+
+	RedHat 9 可以這樣做,但我沒試過~
+	在圖形安裝程式的階段，現在您可以按下 SHIFT-Print Screen 的按鍵組合，
+	即可擷取 目前安裝畫面的螢幕縮圖。 這些螢幕縮圖將會儲存在下列的目錄中：
+
+	/root/anaconda-screenshots/
+
+	您可以在新安裝好的系統重新開機後存取這些螢幕縮圖。
+
+----------------------------------------------------------------------------------------------------

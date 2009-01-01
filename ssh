@@ -1,0 +1,91 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+sshd configure file 中的 ListenAddress 是定義所要監聽的 IP，
+預設是 0.0.0.0，也就是 interface 上面所有 IP 都監聽，比方您
+今天 eth0, eth1 IP 分別為 168.95.1.1, 192.168.123.1 那麼用
+ssh client 到這兩個 IP 都可以。
+
+如果 ListenAddress 指定了要聽的 IP，比方 168.95.1.1 那麼 ssh
+將會無法 client 到 192.168.123.1。
+
+這個 ListenAddress 與限制哪些 IP 來源才可以連線並沒有關係。
+
+如果要限制某 IP 才可以使用 ssh 連線進來，可以配合 tcp wrapper
+來使用，比方在 /etc/hosts.allow 限制：
+
+sshd:140.128.1.123
+
+在 /etc/hosts.deny 限制：
+sshd:all
+
+這樣一來，只有 140.128.1.123 這個 IP 才可以用 ssh 連上來了。
+
+另外直得一提的是，剛好昨天回了一篇，有關於 sshd 可否限制
+某個使用者才能登入到系統，請參考下面內容：
+
+作者 leoliou (Just do it!) 看板 Linux
+標題 Re: 如何限制linux使用者使用 SSH Client登入
+時間 Tue Aug 21 23:34:53 2001
+───────────────────────────────────
+※ 引述《amy547 (狂叟)》之銘言：
+> 請問如何限制linux使用者使用 SSH Client登入，
+> 之前用來擋telnet登入的方法好像失效了
+
+　編輯 /etc/pam.d/sshd 檔案，加入這一行內容：
+代碼:
+
+auth required /lib/security/pam_listfile.so item=user sense=deny file=/etc/sshd.deny onerr=succeed
+
+　由於版面關係，以上兩行實際上為同一行，請自行做調整。
+
+　接下來，自行建立 /etc/sshd.deny 檔案，內容為欲拒絕之 User 即可。
+
+　比方：
+
+　/etc/sshd.deny 檔案內容:
+　root
+　leo
+
+　這樣一來，root 與 leo 這兩位使用者，就無法使用 ssh 登入系統了。
+
+----------------------------------------------------------------------------------------------------
+
+* 直接用key登入系統
+
+	1. 製作key
+		ssh-keygen -t rsa1 -f ~/.ssh/identity -b 1024 -N ""
+
+		-t 是 key 的 type, 還有 rsa, des 等等
+		-f 是 private key 的存放目錄
+		-b 是 key 的 bit 數
+		-N 是使用此 key 之前必須輸入的密碼, 不建議如上例不加密碼, 不然任何人拿到 key 就能用了
+
+	2. 把 key 加入認證
+		cd ~/.ssh 
+		cat identity.pub >> authorized_keys
+
+	3. 把 ~/.ssh/identity 放到你要直接用 key 登入系統的地方, 以 putty 為例, 要在 auth/ssh 內指定key的位置
+
+----------------------------------------------------------------------------------------------------
+
+* 利用 ssh 的 port forwarding 功能, 實做加密通道
+
+	說明: 
+		先用 ssh 做一個加密連線, 把 mail server 的 port 25 與 localhost:2500 連在一起, 如此一來, 只要有任何連線連到 localhost:2500 就相當於連線到 mail server 的 port 25.
+
+	系統需求:
+		兩端系統都必須先安裝 SSH Server. (OpenSSH 有 for Windows 版本)
+
+	步驟:
+		1. 建立加密通道
+			ssh -C -f M9002134@mail.ntust.edu.tw -L 2500:mail.ntust.edu.tw:25 sleep 10000000 
+
+		-C 表資料要先壓縮再傳送
+		-f 執行命令前進入背景
+		-L port:host:hostport  把 host:hostport 導到 localhost:port
+		sleep: shell  命令, 等待後方指定秒數後即離開, 用來控制連線時間.
+
+		2. 將郵件軟體的 smtp 伺服器設成 localhost:25 即可.
+
+----------------------------------------------------------------------------------------------------

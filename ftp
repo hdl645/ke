@@ -1,0 +1,71 @@
+vim:enc=utf8:tw=0:ts=4
+----------------------------------------------------------------------------------------------------
+
+* 自動 login
+	編寫 /etc/netrc 或 ~/.netrc, 格式如下 (雙引號不用打):
+
+	machine "FTP站的domain name 或ip" login "帳號" password "密碼"
+
+	其中, machine 及後方的name 兩字可以用 default, 表示比對ip或域名. 因此, 可以建立如下檔案, 自動登入匿名ftp:
+
+	default login ftp password test@yahoo.com
+
+----------------------------------------------------------------------------------------------------
+
+* 只下載新檔
+
+	連入ftp後用 newer 檔名, ftp伺服器會依據本地端檔案的新舊判斷需不需要下載. 缺點是, 此命令如同 get, 只能指定一個檔案.
+ 
+----------------------------------------------------------------------------------------------------
+
+* ftp 無法切換至link所指目錄
+
+From: takayuki@bbs.ee.ntu.edu.tw (玉米片)
+我在使用者aaa家目錄下設定了其他連結
+ln -s /home/bbb bbb
+aaa與bbb設定為同一個群組，且chmod 755。如果直接login時，的確是可以互
+寫但是ftp時，aaa卻無法切換至該目錄bbb。
+請問該怎麼做可以使用連結的檔案？又或，如果我要在ftp時aaa可以上傳下載
+檔案至bbb的目錄中該怎麼做？謝謝。
+
+From: kenduest.bbs@bbs.sayya.org (小州)
+拿去年的文章回這篇文章。這篇是上google.com找到的。
+
+寄件者：apt-get inst 小州 (kenduest.bbs@bbs.sayya.org)
+主旨：Re: 請教一個wuftp的問題
+新聞群組：tw.bbs.comp.linux
+日期：2001-12-08 12:42:00 PST
+
+不是權限的問題，是anonymous登入後，ftpd會呼叫chroot()把/var/ftp作為/
+，所以ln -s連結超出/var/ftp的項目都會失效。
+解決辦法:
+1.把實際目錄搬到/var/ftp裡面
+2.架設nfs/smb server，分享出適當的目錄，然後mount到/var/ftp內
+3.kernel 2.4的話，可以用mount --bind /path1 /path2
+ex: mount --bind /home/iso /var/ftp/iso
+
+
+----------------------------------------------------------------------------------------------------
+
+* 如何連子目錄一起下載
+
+	方法一：使用ncftp
+
+		get -R remote_file_or_directory 但是ncftp中文字有問題，比如說目錄名有「微」字的就不行了
+
+		可加上-c參數續傳
+
+	方法二：使用lftp
+
+		mirror remote_files_or_directory
+
+		可加上--parallel=N 同時傳N個檔案
+
+		若加上-R則變成上傳
+		
+
+	方法三：使用mirrordir
+
+		mirrordir -v ftp://ftp.ntust.edu.tw/unix/GNU/gcc . 將ftp.ntust.edu.tw/unix/GNU/gcc下所有檔案及子目錄整個抓到目前目錄
+
+----------------------------------------------------------------------------------------------------

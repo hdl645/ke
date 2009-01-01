@@ -1,0 +1,36 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* access to PXA's GPIOs from user space
+
+	摘自 2003 年 六月份 Mailing List
+
+virt_to_xxx() and xxx_to_virt() are _only_ valid on kernel direct-mapped RAM - ie, the virtual address range between PAGE_OFFSET and PAGE_OFFSET + memory size.  Any other use is outside their spec and will fail in unpredictable ways (as you've found out.)  Note also that virt_to_page() does _not_ convert a virtual address to a physical address or physical page index.
+
+If you want to access the GPIO lines, probably the best solution is to open and map /dev/mem, specifying the physical page-aligned address as the offset - the same method is used by the "devmem2" register access program.  (search using google to find that.)
+
+I have tried to mmap using "/dev/map" and it seems to work correctly. It is easy and it is done, so my problem seems to be solved.
+
+Anyway, does anyone know where could I get some information on remap_page_range?
+
+use mmap(), rip out code from http://www.mn-logistik.de/unsupported/pxa250/pxaregs.c
+
+----------------------------------------------------------------------------------------------------
+
+* JTAG 接線圖
+
+	下列 20-pin 接頭是 ICE 的接腳
+
+        Vcc     1  2
+        nTRST   3  4
+        TDI     5  6
+        TMS     7  8
+        TCK     9  10
+                11 12
+        TDO     13 14
+        nRESET  15 16
+                17 18
+                19 20   GND
+
+
+----------------------------------------------------------------------------------------------------

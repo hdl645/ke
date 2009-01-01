@@ -1,0 +1,68 @@
+vim:enc=utf8:tw=0:ts=4
+----------------------------------------------------------------------------------------------------
+* 安裝 由 CIC 發下來的 Cadence 的軟體
+
+	1. mkdir /cadtools/cadence 		習慣上好像都是放 /cds_sun/cadence, 不過沒關係, 只要 /usr/cadence 有指到安裝目錄即可
+
+	2. tar xzvf main.tgz 	-C /cadtools/cadence
+		tar xzvf ic446p1.tgz -C /cadtools/cadence
+		tar xzvf ic446p2.tgz -C /cadtools/cadence
+		tar xzvf psd.tgz 		-C /cadtools/cadence
+		tar xzvf dsmse.tgz 	-C /cadtools/cadence
+		tar xzvf icc.tgz 		-C /cadtools/cadence
+		tar xzvf ldv.tgz		-C /cadtools/cadence
+		tar xzvf spr.tgz 		-C /cadtools/cadence
+		註: 這裡用的 tar 是光碟上所附的, 支援 z 參數; 若是工作站預設的則要以下列命令格式解壓縮:
+		gzip -dc main.tgz | tar xvf - -C /cadtools/cadence
+
+	3. unlink /usr/cadence
+
+	4. ln -s /cadtools/cadence /usr/cadence
+
+	5. 在 /usr/cadence/share/license/clients 加入
+		* 5280@lsntu2
+		* 5280@lsncu2
+		* 5280@lsnctu2
+		* 5280@lsnchu2
+		* 5280@lsnckuee2
+		* 5280@lscic2.cic.edu.tw
+
+	6. 在 /etc/hosts 加入 License Server 的 ip
+		140.112.20.57		lsntu2
+		140.112.20.58		lsntu
+		140.113.202.151	lsnctuee
+		140.113.202.152	lsnctu2
+		140.115.71.66		lsncu
+		140.115.71.67		lsncu2
+		140.116.156.172	lsncku
+		140.116.156.173	lsncku2
+		140.120.90.110		lsnchu
+		140.120.90.50		lsnchu2
+		140.126.26.245		lscic
+
+	7. 若系統使用 OpenWin, 則
+		ln -s /usr/openwin/lib/X11 /usr/lib/X11
+		若系統使用 X11R6, 則
+		ln -s /usr/X11R6/lib/X11	/usr/lib/X11
+
+	8. 在 /etc/rc3 最後面加上
+		/usr/cadence/ic446/tools/dfII/bin/cdsd &
+
+	9. 在 .cshrc 內加上 
+		source /usr/cadence/cic_setup/cds_0207.csh
+		source /usr/cadence/cic_setup/license.csh
+
+	備註: 若hostname和當時申請的不符, 則執行icfb或icms等軟體時, 不會出現Cadence視窗. 請修改 /etc/nodename, 並重新啟動機器後再重新執行.
+
+----------------------------------------------------------------------------------------------------
+
+* dracula 在 LPE 時,無法產生 SPICE.DAT
+
+	狀況一:
+		做 drc 及 lvs 都沒有 mismatch, 但是跑 lpe 時會在 stage 50 停下來
+		==> 請檢查 lvs 的結果, 確認各 pin 腳都有用 text2 打上 label. 打 label 時最好是直接打在 pin 上, 不要用 attach 功能. 因為 attach 功能是記絕對座標, 當 pin 腳移動後 label 不管有沒有被移動, 還是一樣記住原先的位置. 在本狀況中, 所有找不到的 pin 腳重新打 label 後, lpe 有產生出 SPICE.DAT.
+
+	狀況二: (聽說的)
+		有人說 cell 的名字不能太長, 也不要有連續兩個字母相同的. 
+
+----------------------------------------------------------------------------------------------------

@@ -1,0 +1,234 @@
+vim:enc=utf8:tw=0:ts=4
+----------------------------------------------------------------------------------------------------
+
+* 安裝 java 並處理好 package 的相依性
+
+	摘自:http://wiki.debian.org.tw/index.php?page=Java
+
+Java
+DebianWiki | RecentChanges | Preferences
+Debian GNU/Linux Java FAQ. http://www.debian.org/doc/manuals/debian-java-faq/index.html#contents
+J2SE 1.4.2 SDK 安裝
+下載 & 安裝
+到 http://java.sun.com/j2se/1.4.2/download.html
+下載 Linux self-extracting file
+例如 j2sdk-1_4_2_01-linux-i586.bin
+假設我將檔案下載存到 /home/knoppix 下面
+以 root 的身份執行
+
+chmod +x /home/knoppix/j2sdk-1_4_2_01-linux-i586.bin
+
+然後看你要將J2SE裝到那個目錄下
+例如 /usr/local
+
+cd /usr/local
+/home/knoppix/j2sdk-1_4_2_01-linux-i586.bin
+
+然後回答 yes 等一會就安裝好了...*^^*
+設定 PATH
+建議設定一般使用者的 PATH 即可
+例如 修改 ~/.bashrc 將下列敘述加入
+
+export PATH="/home/knoppix/j2sdk-1_4_2_01/bin:$PATH"
+
+然後重新開個 linux console 就可以用了
+不然就輸入 source ~/.bashrc 是一樣的
+若是你的系統當中有裝 gcj 建議把它移除或是修改上面的 ~/.bashrc 為
+
+export PATH="$PATH:/home/knoppix/j2sdk-1_4_2_01/bin"
+
+若想要每位使用者都可以使用則修改 /etc/profile
+補充事項
+
+   1. 必須要安裝 xlibs 才可以正常運作。
+   2. for displaying chinese characters,please put [This] under $JAVA_HOME/jre/lib/. if you don't want to modify it ,please apt-get install ttf-bitstream-vera
+
+
+將 Sun J2SE 與 debian 整合
+整合後可以用 debian-way 進行對於 Java 執行環境的管理。比如說你可能會有多套 Java runtime 安裝在系統上，整合後你就可以利用 update-alternatives 來管理那個才是預設的 Java runtime.
+
+大致上就是先將 Sun J2SE SDK 裝到 /usr/local/lib 下面，然後再額外安裝 dummy packages 把他整合進系統環境中。
+
+安裝 Sun J2SE SDK
+請參考前面安裝小節，在這邊將安裝後的結果 link 到 j2se 以方便後續的動作，您也可以視管理的需求 link 成 sun-j2se-sdk 之類的名字。
+
+debian:~/j2se# wget %SDK_INSTALLER_URL%/j2sdk-1_4_2_02-linux-i586.bin
+debian:~/j2se# chmod u+x j2sdk-1_4_2_02-linux-i586.bin
+debian:~/j2se# cd /usr/local/lib
+debian:/usr/local/lib# ~/j2se/j2sdk-1_4_2_02-linux-i586.bin
+debian:/usr/local/lib# ls
+j2sdk1.4.2_02
+debian:/usr/local/lib# ln -s j2sdk1.4.2_02/ j2se
+
+
+安裝 java-common, java2-common 套件
+
+debian:~/# apt-get install java-common java2-common
+
+
+安裝建構 dummy packages 用的 equivs 套件
+equivs 可以用來建構 dummy package 以處理一些相依性的問題，這是一項進階工具，自己使用時請小心，用的不好的話可能會使您的套件系統變得很奇怪。
+
+debian:~/# apt-get install equivs
+
+
+建構 dummy packages
+建構用來應付相依性問題用的 dummy packages
+
+debian:~/# mkdir pkgz
+debian:~/# cd pkgz
+debian:~/pkgz# cp /usr/share/doc/java-common/dummy-packages/*.control .
+debian:~/pkgz# equivs-build java-compiler-dummy.control
+debian:~/pkgz# equivs-build java-virtual-machine-dummy.control
+debian:~/pkgz# equivs-build java1-runtime-dummy.control
+debian:~/pkgz# equivs-build java2-compiler-dummy.control
+debian:~/pkgz# equivs-build java2-runtime-dummy.control
+
+註: 雖然 mail list 中有提到說 dummy packages 已經加到 contrib 中，不過... 筆者並是沒有找到就是 @_@
+
+安裝 dummy packages
+將 dummy packages 安裝好之後，就可以順利安裝一些需要 java2-runtime 或是 java2-compiler 的套件 (比如 eclipse)
+
+debian:~/pkgz# dpkg -i java-compiler-dummy_1.0_all.deb \
+java2-compiler-dummy_1.0_all.deb java-virtual-machine-dummy_1.0_all.deb \
+java2-runtime-dummy_1.0_all.deb java1-runtime-dummy_1.0_all.deb
+
+
+將必要的執行檔繫結到系統中
+這邊只繫結了 java, javac, jar 三個程式，也可以視需求把更多的程式繫結到系統上。比如經常需要對 jar 簽署的人可能會想將 jarsigner 繫結到系統上。
+
+debian:~/# update-alternatives --verbose --install /usr/bin/java java \
+/usr/local/lib/j2se/bin/java 500 --slave /usr/share/man/man1/java.1 java.1 \
+/usr/local/lib/j2se/man/man1/java.1
+debian:~/# update-alternatives --verbose --install /usr/bin/jar jar \
+/usr/local/lib/j2se/bin/ja 500 --slave /usr/share/man/man1/javac.1 javac.1 \
+/usr/local/lib/j2se/man/man1/javac.1
+debian:~/# update-alternatives --verbose --install /usr/bin/jar jar \
+/usr/local/lib/j2se/bin/jar 500 --slave /usr/share/man/man1/jar.1 jar.1 \
+/usr/local/lib/j2se/man/man1/jar.1
+
+
+這樣子整合算是完成了。
+
+參考資料
+http://www.debian.org/doc/manuals/debian-java-faq/ch11.html
+編輯這份文件 | 檢視文件沿革
+最後修改日期: Mon, 27 Oct 2003 22:54:25
+搜尋:
+
+----------------------------------------------------------------------------------------------------
+
+* 安裝字型
+
+	摘自 http://wiki.debian.org.tw/MingLiu
+
+0. 將 /mnt/c/WINDOWS/Fonts/mingliu.ttc 複製到 /usr/share/fonts/truetype/dynalab
+
+1.安裝軟體
+
+#apt-get install defoma x-ttcidfont-conf libft-perl
+
+2.產生 hints (假設 mingliu.ttc 放在 /usr/share/fonts/truetype/dynalab)
+
+#defoma-hints truetype /usr/share/fonts/truetype/dynalab/mingliu.ttc > /etc/defoma/hints/ttf-dynalab-mingliu.hints
+
+註: 實際測試時若使用上述命令會一直在 Wait for seconds... , 因此我只有輸入 > 左邊的命令, 依步驟3填好資料後將該程的輸出 (category....begin...end) 複製並貼到 /etc/defoma/hints/ttf-dynalab-mingliu.hints
+
+3.回答問題
+(a)mingliu.ttc 有兩個 faces, 回答 Yes
+(b)Choose the family of mingliu.ttc face #0, 選 MingLiu
+(c)PS Font 選 MingLiu
+(d)Foundry 填 dynalab
+(e)Language 勾 Chinese-Taiwan 與 English
+(f)GeneralFamily? 選 Ming
+(g)Weight 選 Medium
+(h)Width 選 Variable
+(i)Shapes 選 Upright
+(j)Alias 自己隨意命名囉
+(k)Priority 選 20
+(l)之後會繼續問 PMingLiu? 的資訊, 就參照 MingLiu 的去回答即可
+
+4.註冊字型
+
+#defoma-font -v register-one \
+ /etc/defoma/hints/ttf-dynalab-mingliu.hints \
+ /usr/share/fonts/truetype/dynalab/mingliu.ttc 
+#defoma-reconfigure
+
+5.加入路徑
+編輯 /etc/X11/XF86Config-4 加入
+
+FontPath "/var/lib/defoma/x-ttcidfont-conf.d/dirs/CID" 
+FontPath "/var/lib/defoma/x-ttcidfont-conf.d/dirs/TrueType"
+
+
+6.大功告成
+
+#xset fp rehash
+
+
+Note: fontconfig的使用者 (檢查一下有沒有/etc/fonts/fonts.conf) 請將第六步改成執行
+
+#fc-cache
+
+----------------------------------------------------------------------------------------------------
+
+* 
+
+	摘自 http://moto.debian.org.tw/viewtopic.php?p=17324#17324
+
+最近在學 LaTeX (其實也才三天而已  )
+
+tex 要轉 pdf 的時候
+如果是用 bg5latex -> dvips -> ps2pdf 就可以成功
+但是如果用 pdflatex 直接轉 pdf
+出現看嘸的訊息
+! Argument of \CJK@XX has an extra }.
+<inserted text>
+\par
+l.9 ...e6^^bc^^c6^^a4Q^^a8B^^a1A^^c1^^c5^^b5M^^b6}
+^^ae^^d4^^a1C^^a4g^^a6a^^a...
+
+?
+
+而在用 bg5latex -> dvipdfmx 轉換 pdf 時
+則會出現
+** ERROR ** Could not find encoding file: ETen-B5-H
+把 ghostscript 的 CMap 檔 ETen-B5-H 做 link 過來好像也是不行
+
+我安裝的 LaTeX 相關套件
+tetex-bin, tetex-base, tetex-extra
+cjk-latex, tfm-arphic-*
+設定都沒有更動
+
+請問有什麼解決的方法嗎？
+
+
+安裝好 dvipdfmx 之後，請修改 /etc/texmf/texmf.d/50dvipdfmx.cnf
+
+;; READ /usr/share/doc/dvipdfmx/README.Debian for details:
+CMAPINPUTS = .;/usr/share/fonts/cmap/adobe-gb1//;/usr/share/fonts/cmap/gs-cjk-re
+source//;/usr/share/fonts/cmap/adobe-cns1//;/usr/share/fonts/cmap/adobe-japan1//
+
+然後執行 update-texmf，dvipdfmx 就不會有這個問題了
+
+
+----------------------------------------------------------------------------------------------------
+
+* rpm 與 dpkg 相對應關係
+
+ rpm -Uvh --replacepkgs package-version.i386.rpm 可以強制重新安裝指定的套件(該rpm重裝一次)
+apt-get install --reinstall PackageName
+
+rpm -qf /path/to/file 查詢 /path/to/file 是哪個 package 的檔案
+apt-file search FileName | grep "Path/To/FileName$"
+
+
+----------------------------------------------------------------------------------------------------
+
+* 如何查詢某套件recommend或suggest的套件？
+
+
+	在安裝了某個 package 之後，可以下 dpkg -s package 這個指令，看看裡面 Recommends 和 Suggests 這兩欄有沒有推薦其他的 package
+
+----------------------------------------------------------------------------------------------------

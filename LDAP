@@ -1,0 +1,547 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* OpenLDAP 整合方案
+
+Message from Study Area Fourms
+
+OpenLDAP 整合方案
+By Tommy Wu <tommy at teatime.com.tw>
+
+Version 0.03
+
+有位 h 開頭, y 結尾的大大, 在很久很久之前就說要開個 LDAP 的課,
+不知道他現在的鼻子長到什麼地步了.
+
+我目前的公司用的 email 是使用 MS 的 Exchange Server (因為母公司
+就是用這個, 且目前都用同一個 domain name, 只是我們這兒的使用者
+的信件會由美國轉到本地的 Exchange Server 主機上頭), 不過... 因
+為目前並非所有的員工都有 email, 也由於半個月之前, 母公司被別家
+公司併購了, 好像交易不包含這間子公司, 所以, 我們目前除了少數的
+使用者可以需要使用母公司的 email domain 來與客戶溝通外, 其他的
+使用者並不適合繼續使用母公司的 email domain. 因此, 我的老闆決定
+自己架設自己的 mail server 來使用.
+
+當然, 要我來做, 我一點都不想用 Exchange Server 這種大怪獸, 我的
+老闆對於 MS 的 server 產品也沒什麼信心, 所以, 就考慮使用 linux
+上的 solution. 老闆只有一個要求, 在原本 Exchange Server 上面使
+用 Address Book 的那種方法, 可否繼續存在. 也就是大家會有一個共
+用的 Address Book, 且使用上必須要很方便.
+
+另外就是, 我們目前有很多員工, 在上班的時候, 就只會使用到 browser,
+這些機器上面裝的 Win2000, 就只有開機做一次使用者認證, 控制使用
+者能用的功能, 其他就只用到 IE. 這個授權的費用... 數百台加一加也
+是很可觀, 所以, 日後可能也會改用 linux 的桌面來取代.
+
+所以, 很直覺的就想到使用 OpenLDAP 來管理使用者.
+
+先把目前使用到的東西說一下:
+
+Debian GNU/Linux 3.0
+OpenLDAP
+DaveDAP
+Postfix
+Mailman
+Amavis
+TrendMicro vscan
+Open Webmail 2.0
+Netscape 7.02
+...
+
+
+### OpenLDAP ###
+http://www.openldap.org/
+
+首先, 參考下面的網址, 在 Debian 上使用 OpenLDAP 來管理使用者:
+
+http://www.shellhung.org/technical/ldapauth.html
+
+在 slapd.conf 中的 schema 設定, 我們加上了 extension, misc,
+postix 等額外的 schema:
+
+代碼:
+# Schema and objectClass definitions
+include         /etc/ldap/schema/core.schema
+include         /etc/ldap/schema/cosine.schema
+include         /etc/ldap/schema/nis.schema
+include         /etc/ldap/schema/inetorgperson.schema
+include         /etc/ldap/schema/extension.schema
+include         /etc/ldap/schema/misc.schema
+include         /etc/ldap/schema/postfix.schema
+
+
+其中, extension.schema 內有提到要改一些其他的 schema 才能用.
+另外, postfix.schema 內容如下:
+
+代碼:
+# postfix.schema begin
+attributetype ( 1.3.6.1.4.1.4203.666.1.200
+            NAME ′mailacceptinggeneralid′
+            EQUALITY caseIgnoreMatch
+            SUBSTR caseIgnoreSubstringsMatch
+            SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{1024} )
+attributetype ( 1.3.6.1.4.1.4203.666.1.201
+            NAME ′maildrop′
+            EQUALITY caseIgnoreMatch
+            SUBSTR caseIgnoreSubstringsMatch
+            SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{1024} )
+attributetype ( 1.3.6.1.4.1.4203.666.1.202
+            NAME ′mailquotum′
+            EQUALITY integerMatch
+            SUBSTR caseIgnoreSubstringsMatch
+            SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+attributetype ( 1.3.6.1.4.1.4203.666.1.203
+            NAME ′relaydomain′
+            EQUALITY caseIgnoreMatch
+            SUBSTR caseIgnoreSubstringsMatch
+            SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{1024} )
+#
+objectClass     ( 1.3.6.1.4.1.4203.666.1.100
+        NAME ′AliasesUser′
+        DESC ′Aliases Mail User′
+        SUP top
+        STRUCTURAL
+            MAY  (
+                   mailacceptinggeneralid $ maildrop $ mailquotum $ relaydomain
+                 )
+               )
+# postfix.schema end
+
+
+這個 postfix.schema 我原本認為用不到, 但是在加上 aliases 要支援
+LDAP 的時候, 一直沒辦法成功, 直到使用 maildrop/mailacceptinggeneralid
+才正常.
+
+然後, 在 ACL 的設定上, 如果你不打算提供 anonymous 的讀取權限, 可以把
+
+代碼:
+  by * read
+
+
+改成
+
+代碼:
+  by dn=".+" read 
+
+
+這樣子就必須使用內部的使用者登入後才可以讀取資料.
+
+另外, 在使用 migration-passwd.pl 轉換使用者的資料後, 發
+現有些屬性並沒有加上, 所以我另外加上了下面的資料:
+
+代碼:
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: officePerson
+sn: xxx
+mail: xxx
+title::Ti9B
+ou::Ti9B
+o: xxx
+comment: xxx
+telephoneNumber::Ti9B
+homePhone::Ti9B
+mobile::Ti9B
+
+
+最後, 把一些系統本身的使用者排除, 並不是全部使用 LDAP.
+在 aliases 上的設定, 我使用下面的 ldif 來記錄:
+
+代碼:
+  dn: ou=MailList,dc=xxx,dc=com
+  objectClass: organizationalUnit
+  ou: MailList
+
+
+每一筆 alias 使用下面的 ldif 來記錄:
+
+代碼:
+  dn: cn=some_group,ou=MailList,dc=xxx,dc=com
+  cn: xxx
+  sn: xxx
+  objectClass: inetOrgPerson
+  objectClass: organizationalPerson
+  objectClass: officePerson
+  objectClass: AliasesUser
+  mailacceptinggeneralid: xxx
+  mail: xxxx
+  o: xxxx
+  comment: xxxx
+  maildrop: xxxx
+
+
+為了方便找 email 的 Address Book, 所以也使用 mail 屬性.
+另外 postfix 好像就只認得 mailacceptinggeneralid 當做
+Aliases, maildrop 當做實際的收信人, 所以, 只好將就使用.
+(依照 google 上找到的資料來看, 應該在 main.cf 中可以設
+定要找的屬性, 與回傳的屬性, 但... 試過都不成功)
+
+這樣子, 在 OpenLDAP 上就完成了.
+
+最後, 編輯 /etc/libnss-ldap.conf 的內容, 把有關 LDAP 伺
+服器的設定確定後, 把 nss_base_passwd, nss_base_shadow 改
+為:
+
+代碼:
+nss_base_passwd         ou=People,dc=xxxx,dc=com
+nss_base_shadow         ou=People,dc=xxxx,dc=com
+
+
+另外, 把 /etc/nsswitch.conf 中
+
+代碼:
+passwd:         compat
+group:          compat
+shadow:         compat
+
+
+改為
+
+代碼:
+passwd:         compat ldap
+group:          compat
+shadow:         compat ldap
+
+
+以確定所以在 passwd 中的使用者與 LDAP 中的使用者都可以使用.
+
+最後, 修改 /etc/pam.d/ 下的檔案 (幾乎每個都要).
+把原本有使用到 pam_unix.so 的設定:
+
+代碼:
+auth       required   pam_unix.so nullok
+account    required   pam_unix.so
+session    required   pam_unix.so
+
+
+改為:
+
+代碼:
+auth       sufficient   pam_ldap.so
+auth       required   pam_unix.so nullok try_first_pass
+account    sufficient   pam_ldap.so
+account    required   pam_unix.so
+session    required   pam_mkhomedir.so skel=/etc/skel umask=0022
+session    sufficient   pam_ldap.so
+session    required   pam_unix.so
+
+
+這樣子做好後, 就可以使用 LDAP 來管理一般的使用者了.
+而且在使用者第一次使用的時候, 就自動的建立 home 目錄. (注意一下,
+如果你使用的目錄不止一層, 則上一層必須自行建立, 否則會失敗. 例如,
+我們的使用者上千位, 如果都放同一個 /home 下面, 會很難找, 所以就在
+/home 下面建立 a, b, c....z 等目錄, 把該字母開頭的使用者的 home
+建立在那個字母目錄之下.) 至於要放 session 或 auth, account 的位置
+應該都可以, 依照你的需求來決定吧.
+
+另外提一下, 對於 ftp/ssh/login 的使用, 我們用 pam_listfile.so
+來管理可以使用的使用者:
+
+代碼:
+auth required pam_listfile.so item=user sense=allow
+              file=/etc/listfile/loginusers onerr=fail
+
+
+上面為同一行.
+如此, 只有存在於該檔案的使用者可以提供該服務.
+ProFTPD 似乎不能直接 /etc/ftpusers 來設定提供服務的使用者, 所以
+使用另外的檔案來處理就可以.
+
+基本上, 在經過這樣子的處理之後, 多數在 linux 上提供的服務, 都可
+以使用 LDAP 了, telnet/ftp/ssh.... 都可以正常使用, passwd 一樣可
+以改密碼, 唯一會覺得怪怪的是, 如果 /etc/passwd 沒有同步, 在 login
+之後, 看到的不會是自己的名字, 而是 I have no name!.
+
+PS. 關於這個 I have no name! 的問題, 我後來在另一台機器上, 發現登
+入時並沒有這個情形, 而會顯示正確的名字, 但是在 OpenLDAP 執行的那
+一台機器上就不行. (不過在把 /etc/libnss-ldap.conf 這個檔案屬性改
+為 644 之後, 也可以正確查到名字)
+
+
+
+### DaveDAP ###
+http://students.cs.byu.edu/~djsmith/davedap/
+
+由於使用者的資料都在 LDAP 之中, 所以當我們要新增, 修改, 刪除使用
+者的時候, 都必須要去維護 LDAP 的資料.
+
+DaveDAP 是一個 Web 介面的 LDAP 維護程式, 使用上覺得還不錯, 並不會
+很難使用, 各位也可以試看看.
+
+當然, 這類的工具不少, 大家可以仔細選擇一下.
+
+我們公司... 不用中文, 所以這些工具的中文相容問題也就不在考慮之內.
+
+
+### Postfix + Amavis + vscan ###
+http://www.postfix.org/
+
+Postfix + OpenLDAP 可參考:
+http://phorum.study-area.org/viewtopic.php?t=15791
+
+Amavis 可參考:
+http://phorum.study-area.org/viewtopic.php?t=10790
+
+為什麼會使用 Postfix 呢... 其實很簡單的原因是因為 Debian 中內定的
+amavis 是配合 postfix 使用的.
+
+至於為什麼用 TrendMicro 的 vscan... 那是因為習慣...
+
+先說明 Postfix 的 main.cf 設定:
+
+代碼:
+# user
+local_recipient_maps = unix:passwd.byname ldap:ldapuser $alias_maps
+ldapuser_server_host = localhost
+ldapuser_search_base = ou=people,dc=xxxx,dc=com
+ldapuser_query_filter = (uid=%s)
+
+
+用來查詢 local 有那些使用者.
+
+代碼:
+# alias
+alias_maps = hash:/etc/aliases ldap:ldapalias
+alias_database = hash:/etc/aliases
+ldapalias_server_host = localhost
+ldapalias_search_base = ou=maillist,dc=xxxx,dc=com
+ldapalias_query_filter = (mailacceptinggeneralid=%s)
+ldapalias_result_attribute = maildrop
+
+
+用來查詢 aliases 的資料, 這兒前面有提過, 這個 filter 與 result 的屬性,
+改用別的都不成功, 用這兩個就可以...
+
+代碼:
+content_filter = vscan:
+soft_bounce = yes
+
+
+設定 amavis 的 filter. 必須在 master.cf 加上:
+
+代碼:
+# amavis
+vscan     unix  -       n       n       -       10      pipe flags=q user=amavis
+argv=/usr/sbin/amavis ${sender} ${recipient}
+localhost:10025 inet n - n - - smtpd -o content_filter= -o local_recipient_maps=
+
+
+然後在 amavisd.conf 指定 port 10025.
+
+代碼:
+smtpd_sasl_auth_enable = yes
+broken_sasl_auth_clients = yes
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_local_domain = $myhostname
+smtpd_recipient_restrictions = reject_unknown_recipient_domain permit_sasl_authenticated,
+      permit_mynetworks, reject_unauth_destination
+maps_rbl_domains = relays.ordb.org, list.dsbl.org, blackholes.mail-abuse.org,
+      bl.spamcop.net
+smtpd_client_restrictions = reject_maps_rbl, permit_sasl_authenticated
+smtpd_etrn_restrictions = permit_mynetworks, reject
+
+
+這些是設定 smtpd 使用 SASL 來認證, 與 reject 一些 ORDB 之類的網站.
+在 /etc/postfix/sasl/ 目錄下產生一個 smtpd.conf 來指定使用 pam 來認證:
+
+代碼:
+pwcheck_method: pam
+mech_list: plain login
+
+
+然後在 /etc/pam.d/smtp 這個檔案中, 設定使用 pam_ldap.so 來認證.
+
+代碼:
+transport_maps = hash:/etc/postfix/transport
+
+
+設定 transport, 讓不同的信走不同的路線出去. (到母公司會走內部的線路)
+
+最後, 提一下 vscan 的更新, 使用 ftp-mirror 每天 mirror ftp.antivirus.com 上
+面的病毒碼檔案:
+
+代碼:
+package = antivirus
+ftp-server = ftp.antivirus.com
+remote-directory = /products/pattern
+local-directory = /home/ftp/pub/trend/pattern
+transfer-file-regexp += !/\/lpt[0-9][0-9][0-9]\.zip$/
+transfer-directory-regexp += !/\/cpr\/$/
+transfer-directory-regexp += !/\/99x\/$/
+transfer-directory-regexp += !/\/old\/$/
+
+
+然後使用下面的 script 來更新病毒碼:
+
+代碼:
+#!/bin/bash
+
+cd /etc/iscan
+CURR_PTN=`ls lpt\$\vpn.* | sort | tail -n1 | sed -e ′s/lpt\$vpn.//′`
+#echo "Current pattern is $CURR_PTN"
+
+cd /home/ftp/pub/trend/pattern
+LAST_PTN=`ls ptn*.tar | sort | tail -n1 | sed -e ′s/ptn//′ | sed -e ′s/.tar//′`
+#echo "Last pattern is $LAST_PTN"
+
+if [ $LAST_PTN -le $CURR_PTN ]; then
+#  echo "Current is the last one pattern now!"
+exit 0
+fi
+
+cd /etc/iscan
+echo "Update pattern from $CURR_PTN to $LAST_PTN ..."
+tar xvf /home/ftp/pub/trend/pattern/ptn${LAST_PTN}.tar lpt\*
+
+echo "Remove old pattern ..."
+PTN_CNT=`ls lpt\$\vpn.* | wc -l | sed -e ′s/ //′`
+if [ $PTN_CNT -ge 4 ]; then
+echo "more than 3"
+PTN_LST=`ls lpt\$\vpn.* | sort -r`
+cnt=0
+for i in $PTN_LST; do
+    if [ $cnt -ge 3 ]; then
+       echo "remove $i"
+       rm -f $i
+    fi
+    let "cnt += 1"
+done
+fi
+
+
+### Mailman ###
+
+前面有關 aliases 的設定, 雖然可以運作, 但是在配合 Postfix 使用時,
+發現當寄給一個 aliases 時, 如果其中有一個人的信寄不出去時 (可能是
+quota 超過), 信會留在 queue 中, 等一段時間後, 又送一次... 這時所
+有該 aliases 的人又收到一次. 造成一堆重複信件的問題.
+
+所以, 決定改用 maillist 的方式來處理, 就安裝上 mailman 來使用.
+在前面 LDAP 中有關 maillist 的設定, 仍然可以使用. 只是實際上就只留
+下群組的名稱與 email 以供通訊錄查詢, 其他的仍回到使用 /etc/aliases
+來設定.
+
+
+
+### Open Webmail ###
+http://www.openwebmail.org/
+
+Open Webmail + OpenLDAP 可參考:
+http://phorum.study-area.org/viewtopic.php?t=15688
+
+主要就是使用 auth_pam.pl 來配合 pam_ldap.so 來認證使用者.
+另外, 考慮到其中的 Global Address Book 也可以直接使用 OpenLDAP
+上面的資料, 如此就不用維護兩份 Address Book.
+
+原本我考慮直接在 openwebmail-abook.pl 之中, 加上直接去讀取 LDAP
+資料的 perl 程式碼, 後來考慮到似乎不需要每次都去讀取, 只要每天
+固定時間去查詢一次, 再更新到 Open Webmail 本身的 Address Book
+就可以了.
+
+如果你需要直接由 LDAP 讀取 Address Book, 可以修改下面的程式到
+openwebmail-abook.pl 中的 ′global_addressboot′ 那段的程式碼.
+(並非直接可用, 你需要把下面程式碼讀出的資料放到 Open Webmail
+使用的 %globaladdress, %globalnotes 兩個變數中)
+
+代碼:
+#!/usr/bin/perl
+
+use Net::LDAP;
+
+$username = "uid=xxxx,ou=people,dc=xxxx,dc=com";
+$password = "xxxx";
+
+$conn = new Net::LDAP("localhost",port=>389);
+
+if ($conn->bind(dn=>$username,password=>$password)) {
+   print "Authentication Successful!\n";
+} else {
+   print "Authentication Failed!\n";
+}
+
+$mesg = $conn->search(base=>"dc=xxxx,dc=com", scope=>"sub",
+                     filter=>"(mail=*)");
+
+for ($i = 0; $i < $mesg->count; $i++) {
+my $entry = $mesg->entry($i);
+
+$cn = ($entry->get(′cn′))[0];
+$mail = ($entry->get(′mail′))[0];
+
+printf "$cn    $mail \n";
+}
+
+
+如果你的 LDAP 允許 anonymous search, 可以省略上面的 bind 那段.
+
+現在我們則使用下面的程式碼, 定時更新 Open Webmail 的 Address Book:
+
+代碼:
+#!/usr/bin/perl
+
+use Net::LDAP;
+
+$username = "uid=xxxx,ou=people,dc=xxxx,dc=com";
+$password = "xxxx";
+
+$conn = new Net::LDAP("localhost",port=>389);
+
+if ($conn->bind(dn=>$username,password=>$password)) {
+   print "Authentication Successful!\n";
+} else {
+   print "Authentication Failed!\n";
+}
+
+$mesg = $conn->search(base=>"dc=xxxx,dc=com", scope=>"sub",
+                     filter=>"(mail=*)");
+
+open(ABOOK, ′> /tmp/abook.lst′);
+for ($i = 0; $i < $mesg->count; $i++) {
+my $entry = $mesg->entry($i);
+
+$cn = ($entry->get(′cn′))[0];
+$mail = ($entry->get(′mail′))[0];
+
+print ABOOK $cn;
+print ABOOK "@@@";
+print ABOOK $mail;
+print ABOOK "@@@";
+print ABOOK $cn;
+print ABOOK "\n";
+}
+
+close(ABOOK);
+
+
+然後再去比對與現有的 Address Book 是否一致, 如果不一樣, 就更
+新過去.
+
+
+### Netscape ###
+http://www.netscape.com/
+
+最後是 client 的使用, 我們試過 Outlook, Outlook Express, Netscape 等
+程式, 發現在這之中, Netscape 使用 LDAP 的方法最簡單, 所以我們建議使用
+者如果不使用 webmail, 就可以利用 Netscape 7.x 的版本.
+
+只要在 Directory Server 的設定中, 設好 Base DN, 如果不使用 anonymous,
+也設好 Bind DN, 就可以直接在 to: cc: bcc: 等地方直接使用.
+
+
+其他... 還有許多的服務, 目前還沒做到, 所以本文應該還會繼續修正.
+
+
+本文的最新版本可以由下列的網頁取得:
+
+http://www.teatime.com.tw/~tommy/doc/openldap.txt
+
+
+代碼:
+ChangeLog:
+        0.03 change aliases to mailman maillist
+        0.02 add pam_mkhomedir.so
+             ′I have no name!′ fixed
+        0.01 Initital.
+
+
+----------------------------------------------------------------------------------------------------

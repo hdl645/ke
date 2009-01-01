@@ -1,0 +1,1369 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 安全的主機
+
+
+
+    安全的主機
+
+千萬別以為主機架好了以後沒人知道就不注意安全性,以前的 cracker 都是具備高超的技術,可以找出後門鑽進來,現在的 cracker (嚴格來講連 cracker 都稱不上)都是使用一些現成的工具,scan再加上延申式攻擊,所以安裝完以後千萬要記得注意主機的安全!!
+
+幾個觀念要提醒：
+
+   1. 每部主機，針對特定連線範圍，只提供特定的網路服務，給特定的網路使用者(或主機)．
+   2. 網管人員對該部主機，提供了哪些網路服務，要非常清楚．
+   3. 基於上述，不必要的服務，要將它關閉．
+   4. 較好的解決方案是，建立起網路防火牆．
+   5. 開放原始碼的系統，絕對比封閉的系統，在安全問題的解決對策上，有更快的反應速度及彈性，並且禁得起公眾驗證．
+   6. 沒有任何一種系統是絕對安全的，良好的安全設置及維護管理，才是正途．
+
+所以要建立一個安全的主機環境,可以分幾個項目
+
+1.系統安全設定
+
+  1.1
+
+    PAM -- ID
+
+    TCP WRAPPER -- IP
+
+    ipchains -- ports
+
+    xinetd 
+
+  1.2 密碼選取
+
+  1.3 LILO
+
+  1.4 少用 root , SetUID , SetGID
+
+  1.5 設定自動 logout 的時間
+
+  1.6 取消遠端執行某些程式的權限
+
+  1.7 取消 Ctrl-Alt-Del
+
+  1.8 迴避網路上的攻擊
+
+  1.9 常常檢查 log -- tripwap , /etc/syslog.conf 介紹
+
+  1.10 quota
+
+  1.11 用 e-mail 監控主機
+
+  1.12 telnet 的設定
+
+  1.13 限制 samba 連線的範圍,使用加密傳輸
+
+  1.14 ftp 安全設定
+
+  1.15 使用者登入自動通知
+
+　
+
+2.入侵
+
+  2.1 入侵簡介
+
+    2.1.1 攻擊類別
+
+    2.1.2 攻擊分析
+
+    2.1.3 攻擊工具
+
+  2.2 入侵偵測工具介紹
+
+    2.2.1 snort , nmap
+
+    2.2.2 arpwatch
+
+    2.2.3 authconfig
+
+    2.2.4 cleanfeed
+
+    2.2.5 gnupg + gpg
+
+    2.2.6 tcpdump
+
+3.安全的連線
+
+  3.1 少用 r- ,telnet 改用 ssh
+
+  3.2 Auth. SMTP
+
+  3.3 gnupg + gpg
+
+  3.4 openssl & apache
+
+  3.5 portmap
+
+　
+
+4.安全補強 
+
+  4.1 利用 apt 建立 maintain 機制
+
+  4.2 套件更新機制的建立
+
+  4.3 利用 redir 將服務導向到防火牆內
+
+xinet
+
+ipchains
+
+　
+
+1.套件升級
+
+  記得常回RedHat網站瞧瞧,RedHat7.0安裝後記得將wu-ftp及nfs-utilies及bind*升級安裝,記得常常到網站檢查是否需要更新套件!!
+
+2.擋住不必要的連線
+
+  方法有很多種,建議只採用一種就好,方便maintain
+
+  這裡介紹 TCP WRAPPER
+
+  vi /etc/hosts.allow
+
+    ALL:192.168.0.                   #開放 192.168.XXX.XXX 的 IP 連線
+    ALL:(yourIP)                     #開放 特定 IP 連線
+    in.ftpd:192.168.0.               #開放 192.168.0.XXX 可以 ftp
+    in.telnetd:192.168.0.0/255.255.255.0  # 開放 192.168.XXX.XXX 可以 telnet
+    portmap:192.168.0.0/24           #開放 192.168.XXX.XXX 的 portmap
+    ALL:.cracker.org EXCEPT trust.cracker.org # 開放整個 .cracker.org ,除了 trust.cracker.org 之外
+    in.ftpd,portmap:ALL              #開放全部可以 ftp,portmap(NFS,NIS)
+    pop3d:192.168.0. EXCEPT 192.168.0.1 #開放 192.168.0.XXX 可以收 POP3 的信,除了 192.168.0.1
+
+    註 : 這裡舉例以語法的應用為主,請依實際狀況調整上述語法,千萬別一模一樣照抄!!  
+
+  vi /etc/hosts.deny
+
+    ALL:ALL
+
+    　
+
+  (只開放特定位置的連線,不過遺憾的是也無法用POP3收發e-mail)
+
+另外也可以考慮在使用者登入時,自動執行些 script
+
+  /etc/hosts.deny
+
+    ALL: ALL : spawn (echo Security notice from host `/bin/hostname` ; echo; /usr/sbin/safe_finger @%h ) | /bin/mail -s " xxxxxxxxx warning --- %d-%h security" -c youremail@youremail.com youremail@youremail.com & : spawn ( /sbin/iptables -A INPUT -p all -s %h -j DROP) : twist ( /bin/echo -e "\n\nWAAAARNING connection not allowed. Your attempt has been loggerd.\n\n警告您尚未允許登入，您的連線將會被記錄，並且作為以後的參考 \n\n." )
+
+      1.被擋住時會自動發 mail 通知管理員 youremail@youremail.com
+
+      2."xxxxxxxxx warning" 是用來當作郵件 filter 的條件,這樣可以將特定的資料 filter
+
+      3.郵件主旨會呈現對方的 ip 以及連線方式
+
+      4.配合 iptables , 將對方的 ip 列入黑名單中,成為拒絕往來戶
+
+      5.對方會看到你的"警告訊息",這樣比較會讓對方知難而退!!
+
+    　
+
+3.刪除 /etc/issue ; /etc/issue 
+
+  cat /dev/null > /etc/issue
+
+  cat /dev/null > /etc/issue.net
+
+  (不能刪除,要保留檔案,但是清空內容)
+
+  這樣當別人 telnet 進來時就看不到主機的版本及kernel序號,減少風險
+
+  vi /etc/rc.d/rc.local
+
+  將開機自動產生 /etc/issue ; /etc/issue.net mark 掉,以免下次重新開機時又再產生 /etc/issue ; /etc/issue.net
+
+4.vi /etc/motd
+
+  這是用telnet login 時會出現的訊息,系統管理者可以透過這個檔跟使用者傳達訊息!!
+
+5.利用 PAM 
+
+  vi /etc/ftpaccess
+
+  將不想開放連線的ftp user擋住!!
+
+6.勤看 log
+
+  ls -l /var/log
+
+  記得常常檢查 /var/log/secure ; /var/log/message ... 以儘早發現試圖入侵的傢伙!!
+
+7.若是覺得 TCP WRAPPER 不夠力,那可以用 ipchains 輔助
+
+  ipchains -A input -p icmp -j REJECT
+
+  先拒絕別人來 ping 主機,REJECT 會傳回值,若是更狠一點,可以將 REJECT 換成 DENY ,連 error message 也不會傳回,讓對方以為無此IP
+
+  但是上述指令會造成自己也無法 ping 出去,所以可以稍作改良:
+
+  ipchains -A input -p 1 -s 192.168.0.0/255.255.255.0 -d 192.168.0.223 -j DENY
+
+  指定 192.168.0.0 這個網段無法 ping (當然你也 ping 不到他們),其他網段則可以!!
+
+  ipchains -A input -s 192.168.0.222 -p icmp -j DENY
+
+  只拒絕特定IP的ping,其他IP還是可以ping
+
+  ipchains -A input -p all -s 192.168.0.222 -j DENY
+
+  絕命必殺技,將特定IP全部檔在門外!!
+
+8.將重要的主機藏在LAN裡
+
+  http://www.rpmfind.net/linux/rpm2html/search.php?query=redir  
+
+    找到適合的 redirect 程式
+
+  rpm -Uvh redir-2.2-1-ixxx.rpm (xxx為您主機型式)  
+
+    安裝redir-2.2-1-ixxx.rpm
+
+  ipchains -A input -p tcp -d 11.22.33.44 80 -j REDIRECT 8080
+
+  redir --lport=8080 --caddr=192.168.1.1 --cport=80 &
+
+    做 WWW Server對應,請確定安裝了Firewall service及IPV4
+
+  ipchains -A input -p tcp -d 11.22.33.44 25 -j REDIRECT 8025
+
+  redir --lport=8025 --caddr=192.168.1.1 --cport=25 &
+
+    做 MAIL的SMTP Server對應
+
+  ipchains -A input -p tcp -d 11.22.33.44 110 -j REDIRECT 8110
+
+  redir --lport=8110 --caddr=192.168.1.1 --cport=110 &
+
+    做 MAIL的POP3 Server對應
+
+  ipchains -A input -p tcp -d 168.99.1.1 53 -j REDIRECT 8053
+
+  redir --lport=8053 --caddr=192.168.1.1 --cport=53 &
+
+    做 DNS Server對應
+
+9.停掉不必要的服務
+
+  可以用 ntsysv 檢查(但是 ntsysv 只能對一個 runlevel 生效,若要對全部 runlevel 都有效,請使用 chkconfig , ex: chkconfig --list named)
+
+ 
+
+  httpd,named,smb,sendmail 視情況而定，除此之外，必要的有：
+
+atd, crond, inet, keytable, network, random, syslog, xfs(若跑X window的話)
+
+除此之外，除非真的了解需求，否則全部予以關閉．
+
+10.修改 xinetd  的設定 (RedHat 6.X 以前則是 inetd )
+
+  /etc/xinetd.conf
+#
+# Simple configuration file for xinetd
+#
+# Some defaults, and include /etc/xinetd.d/
+
+defaults
+{
+instances = 60
+log_type = SYSLOG authpriv
+log_on_success = HOST PID
+log_on_failure = HOST RECORD
+}
+
+includedir /etc/xinetd.d
+
+ 原則上不需要調整,因為最後一行的關係,全部的設定都放在 /etc/xinetd.d/*.* 
+
+建議只留下 /etc/xinetd.d/wu-ftpd , /etc/xinetd.d/ipop3 
+
+不建議開放 telnet ,建議使用加密過後的 ssh
+
+/etc/xinetd.d/wu-ftpd
+# default: on
+# description: The wu-ftpd FTP server serves FTP connections. It uses \
+# normal, unencrypted usernames and passwords for authentication.
+service ftp
+{
+socket_type = stream
+wait = no
+user = root
+server = /usr/sbin/in.ftpd
+server_args = -l -a
+log_on_success += DURATION USERID
+log_on_failure += USERID
+nice = 10
+}
+
+ /etc/xinetd.d/ipop3
+# default: off
+# description: The POP3 service allows remote users to access their mail \
+# using an POP3 client such as Netscape Communicator, mutt, \
+# or fetchmail.
+service pop3
+{
+socket_type = stream
+wait = no
+user = root
+server = /usr/sbin/ipop3d
+log_on_success += USERID
+log_on_failure += USERID
+disable = yes
+}
+
+ 
+
+11.掃描主機開放哪些服務
+
+  Powertool 光碟片裡有個不錯的工具 -- nmap
+nmap 下載 nmap 安裝及使用說明
+
+ 12.定期注意網路上的安全訊息
+
+  http://www.cert.org.tw/  台灣電腦網路危機處理中心
+
+  http://www.cert.org/ 
+
+  最好訂閱電子報以獲得最新訊息!!
+
+解析 /etc/passwd
+
+passwd 檔中的第一個欄位是使用者名稱。當然, 每個帳號都要有獨一無
+二的使用者名稱。如果試著直接修改 passwd 檔中的一個帳號名稱, 使
+它跟另一個帳號名稱重複 (useradd、coasttool 跟 LISA 這些程式並不
+允許進行這樣的修改), 會發現任何一個程式只會找尋到第一個出現的同
+名帳號, 而且以該帳號為準來檢驗密碼, 並設定該帳號的 UID 給程式,
+而其餘同名的帳號則形同虛設﹔這也是所有欄位中唯一一個必須獨一無二
+的欄位。
+               
+第二個欄位就是經過雜湊 (hash) 演算加密過的密碼, 所謂的雜湊 (hash)
+代表的是以一種數學函數演算來加密的意思。以 Linux 來說, 此雜湊演
+算法所採用的是DES (Data Encryption Standard )。如果這個欄位的內
+容是一個合法有效的密碼, 那麼就會剛好只有 13 個字元﹔而有一些字元
+(像是冒號以及引號等) 則不會出現在這 13 個字元中, 這些密碼在
+ /etc/shadow 檔。如果這個欄位包含的不是一
+個合法雜湊過的 13 個字元的密碼, 就沒有辦法利用該帳號登入系統, 當
+然啦, 空的 (null) 密碼欄位 (像下面這一個) 例外:
+            
+test::500:500:testing:/home/test/:bin/bash
+                
+其中第二欄位是空的, 就連一個空白也沒有, 表示該使用者不需要密碼就
+能登入系統。這顯然不是任何一個管理者所期望的方式, 所以應該要檢查
+每一個密碼欄位, 看是否有任何空的欄位存在。如果這個欄位包含有一個
+合法的密碼, 那麼只要加一個單引號在裡面, 就可以在不更動密碼的前
+提下鎖住這個帳號, 不讓人使用。不過這個方法已經舊了, 現在可能不太
+管用, 新系統所使用的/etc/shadow 有比較好
+的方式, 可以不用修改密碼便將帳號鎖住。在 shadow 機制出現之前, 要
+管理主機上眾多帳號 (只要系統有越多的使用者, 就有更多的入侵者) 的
+管理者常會把單引號放在密碼的第一位來鎖住 root 帳號, 並使用其他的
+帳號像是 "test" 來代替 root 帳號作為系統的管理者帳
+號。
+             
+一個標準的密碼長度有 8 個字元(Character), 雖然使用者可以將密碼設
+定為超過 8 個字元, 但是卻只有前 8 個字元有效。經過雜湊所產生的密
+碼其前兩個字元被稱為salt (這個數字是每次密碼更改後隨機取出, 做為
+起始加密的用途), 這樣可以使雜湊後的密碼產生許多不同的排列組合。
+如此一來, 假使有兩個使用者設定了相同的密碼, 也不會因為加密過的密
+碼相同而被發現。因此, 針對密碼欄位的字典式攻擊法 (dictionary
+attack) 便成為破解密碼最常用的方式。
+                  
+字典式攻擊法 (dictionary attack) 是運用一個類似英文字典的檔案及
+函數運算, 用暴力法嘗試透過各種可能的 salt 來編碼, 去比對字典檔中
+每一個單字是否為密碼。一個破解密碼的高手, 通常會對字典檔內的每一
+個單字加以變化, 例如變換大小寫、首字母大寫、或是在尾端加上數字組
+合。許多容易猜到的密碼就是這樣被破解出來的。
+            
+事實上, 未加密的密碼跟沒設一樣糟糕, 隨便一個破
+解密碼的程式跑不到3耐秒 (十億分之一秒, 縮寫為 ns) 就猜到了。
+
+第三個欄位是 UID, 由先前段落所討論的內容, 您應該已經瞭解 UID 是
+甚麼了, 此處就不再贅述。不過由於相同的 UID 可以重複出現, 因此只
+要是 UID 為 0 的使用者帳號, 就擁有跟 root 一樣的超級使用者權限,
+所以在先前的說明中, 不管是要用 test 或是其他任何名稱的使用者來替
+代 root 做為管理員, 只要將 UID 設定為 0 就可以了。
+                   
+但這個方式也不是完全沒有問題, 假設現在決定要採用這個方法, 並且
+利用「將引號加到加密過的密碼前」的方式把 root 的帳號鎖住, 然後在
+passwd 檔的root 項目之後再建立一個 UID 為 0 的新帳號。就在這時侯
+, 正好有事要離開一段時間, 而又不想登出系統, 便不假思索地直接離
+開了。當回來時, 會發現終端視窗被鎖死了 (被螢幕保護程式鎖住),
+鎖定終端機的程式會認為是 UID 0 的使用者把它鎖住了, 而最先出現
+UID 為 0 的使用者名稱依舊是 root。然而正如之前所提到的, 鎖定終端
+機的程式並不會往下繼續尋找其它 UID 為 0 的使用者帳號來比對正確的
+密碼, 可是由於 root 的帳號密碼已被鎖住, 因而造成被鎖死無法打開鎖
+定的視窗。由此可見, 這個方法也存在著一些問題﹔除非確實了解其設定
+的步驟, 否則不要貿然嘗試。
+                 
+第四個欄位是群組識別碼 GID, 此為使用者所屬的登錄或主要群組。一個
+使用者可以屬於任一個群組, 而使用者的主群組必須是其中之一才行。
+                  
+第五個攔位是備註欄位, 用來填寫參考用的資訊, 原先的欄位名稱叫
+"GECOS",  本來是要給作業系統參考用的。當查詢 (finger) 系統內某個
+使用者時, 便會出現記載於此欄位的相關資訊, 而要不要將相關資訊寫入
+此欄位則視隨管理者的策略而定, 沒有亦可。
+              
+第六個欄位記載著使用者家目錄 (home directory) 的位置。每一個使用
+者都會有一個自己的使用者目錄 (家目錄), 如果家目錄不存在, 使用者
+同樣也可以登入主機, 只是在登入後會進入到 "/" (根目錄)。
+                  
+有些帳號在設定此欄位時必須多加注意, 例如 ftp 這個帳號就應該將匿
+名 FTP 根目錄設定為其家目錄。
+                
+第七個欄位, 也是最後一個欄位, 其中所指定的是使用者的登入 shell。
+這裡並不是隨便填入一個 shell 名稱就可以了, 必須是經過系統認可的
+才行。/etc/shells 這個檔案內就記錄了所有可用的 shell 程式。
+             
+以前使用者密碼確實都是放在 passwd 檔內。幾年前, 由於
+任何人皆可讀取 passwd 的內容, 因而經常被有心人士拿來利用字典攻擊
+法加以破解, 尤其是盜取 root 的密碼。這樣的破解方式通常不用幾個小
+時、最多一天就可以達成；現在更不用說了, 硬體的發展快速, 甚至不到
+幾分鐘就可以將密碼破解出來。為了防止有人從 passwd 檔內把加密過的
+密碼盜走, 現在都把加密後的密碼存在 shadow 檔中。
+                
+
+    Good luck!!
+
+----------------------------------------------------------------------------------------------------
+
+* TCP_Wrapper -- Linux環境下發現並阻止系統攻擊  引言回覆
+全文取自:二林網管
+一、
+　　當在一台PC機上安裝了Linux系統，你就擁有了一個強大的、高級的、多工的網路作業系統。但時候該系統功能有些過於強大了些。某些發佈版本缺省啟動很多服務(如：rlogind, inetd, httpd, innd, fingerd,timed, rhsd,等等)。作為系統管理員需要熟悉瞭解這些服務。若機器連接了Internet，就更需要關自己系統的安全。
+　　大多數攻擊者並不是一個革新者，他們往往利用最新的公佈的系統工具技術等突破一個所周知的或 一個新的剛剛發現的安全漏洞。但作為一個管理者，通過訪問你使用的Linux發佈的官方站點如
+http://www.redhat.com/、http://www.calderasystems.com/等可以獲知最新的安全漏洞及相應的補丁程式。也可以通過定
+期訪問http://www.securityfocus.com/、http://www.cert.org/等安全漏洞通告站點。
+　　控制訪問伺服器的最方便的方法是通過一個叫TCP wrapper的程式。在大多數發佈版本中該程式往往是缺 省地被安裝。利用TCP wrapper你可以限制訪問前面提到的某些服務。而且TCP wrapper的記錄檔記錄了所有的企圖訪問你的系統的行為。通過last命令查看該程式的log，管理員可以獲知誰企圖連接你的系統。
+　　在Linux的/etc目錄下，有一個如下所示inetd.conf檔，該檔是TCP wrapper的配置檔，定義了 TCP wrapper可以控制啟動哪些服務。比如要將finger服務去除，就將finger服務的那一行注釋掉(在前面 加上#即可);
+# inetd.conf This file describes the services that will be available
+# through the INETD TCP/IP super server. To re-configure
+# the running INETD process, edit this file, then send the
+# INETD process a SIGHUP signal。
+
+#
+
+ftp stream tcp nowait root /usr/sbin/tcpd in.ftpd -l -a
+telnet stream tcp nowait root /usr/sbin/tcpd
+in.telnetd
+# Finger， systat and netstat give out user information which may be
+...............
+　　但是對於諸如sendmail，named等服務，由於它們不象finger，telnet等服務，在請求到來時由inet守護進程啟動相應的進程提供服務，而是在系統啟動時，單獨作為守護進程運行的。在slackware版本的Linux，可以通過修改/etc/rc.d目錄下的啟動配置檔rc.M文件，將啟動sendmail的命令行注釋掉：
+#!/bin/sh
+# rc.M This file is executed by init(icon_cool.gif when the system is being
+# initialized for one of the multi user run levels (i.E.
+# levels 1 through 6). It usually does mounting of file
+# systems et al.
+# Start the sendmail daemon:
+# if [ -x /usr/sbin/sendmail ]; then
+# echo 'Starting sendmail daemon (/usr/sbin/sendmail -bd -q 15m)… '
+# /usr/sbin/sendmail -bd -q 15m
+# fi
+............
+　　(注：對於redhat發佈，可以鞏固運行chkconfig命令或linuxconfig命令來管理是否啟動某項服務，如： chkconfig --level 345 sendmail on 來實現系統在345運行級別下自動啟動sendmail) 對於諸如named等其他服務，也是通過將同一個目錄下相應啟動配置檔中相應的啟動命令注釋掉，從而當你重新啟動機器時，相應的服務將不會啟動。而對於高版本的redhat linux，提供了一個linuxconfig命令，可以通過它在圖形介面下互動式地設置是否在啟動時，運行相關服務。但是對於telnet、ftp等服務，如果將其一同關閉，那麼對於管理員需要遠端管理時，將非常不方便。
+　　Linux提供另外一種更為靈活有效的方法來實現對服務請求用戶的限制，從而可以在保證安全性的基礎上， 使可信任用戶使用各種服務。
+　　在/etc目錄下，有兩個檔：hosts.deny hosts.allow 通過配置這兩個檔，你可以指定哪些機器可以使用這些服務，哪些不可以使用這些服務。配置這兩個檔是通過一種簡單的訪問控制語言來實現的，訪 問控制語句的基本格式為：程式名列表，主機名/IP位址列表。
+　　程式名列表指定一個或者多個提供相應服務的程式的名字，名字之間用逗號或者空格分隔，可以在 inetd.conf檔裏查看提供相應服務的程式名：如上面的檔示例中，telent所在行的最後一項就是所 需的程式名：in.telnetd 主機名/IP位址列表指定允許或者禁止使用該服務的一個或者多個主機的標識，主機名之間用逗號或空格分隔。程式名和主機位址都可以使用通配符，實現方便的指定多項服務和多個主機。當服務請求到達伺服器時，訪問控制軟體就按照下列順序查詢這兩個檔，直到遇到一個匹配為止：
+　　1. 當在/etc/hosts.allow裏面有一項與請求服務的主機位址項匹配，那麼就允許該主機獲取該服務
+　　2. 否則，如果在/etc/hosts.deny裏面有一項與請求服務的主機位址項匹配，就禁止該主機使用該項服務
+　　3. 否則允許使用該服務 如果相應的配置檔不存在，訪問控制軟體就認為是一個空檔，所以可以通過刪除或者移走配置文 件實現對所有主機關閉所有服務。
+　　在檔中，空白行或者以#開頭的行被忽略，你可以通過在行前加 # 實現注釋功能。Linux提供了下面靈活的方式指定進程或者主機列表:
+　　1. 一個以'.'起始的功能變數名稱串，如 .amms.ac.cn 那麼www.amms.ac.cn就和這一項匹配成功
+　　2. 以'.'結尾的IP串如 202.37.152. 那麼IP地址包括202.37.152. 的主機都與這一項匹配
+　　3. 格式為n.n.n.n/m.m.m.m表示網路/遮罩，如果請求服務的主機的IP位址與遮罩的位與的結果等於n.n.n.n 那麼該主機與該項匹配。
+　　4. ALL表示匹配所有可能性
+　　5. EXPECT表示除去後面所定義的主機。如:list_1 EXCEPT list_2 表示list_1主機列表中除去List_2所列出的主機
+　　6. LOCAL表示匹配所有主機名中不包含'.'的主機 上面的幾種方式只是Linux提供的方式中的幾種，但是對於我們的一般應用來說是足夠了。
+　　我們通過舉幾個例子來說明這個問題：
+　　例一：我們只希望允許同一個局域網的機器使用伺服器的ftp功能，而禁止副廣域網上面的ftp服務請求， 本地局域網由 202.39.154. 、202.39.153. 和202.39.152. 三個網段組成。在hosts.deny檔中，我們定義禁止所有機器請求所有服務： ALL:ALL 在hosts.allow檔中，我們定義只允許局域網訪問ftp功能： in.ftpd -l -a: 202.39.154 202.39.153. 202.39.152. 這樣，當非局域網的機器請求ftp服務時，就會被拒絕。而局域網的機器可以使用ftp服務。 ALL:ALL 然後重新啟動你的 inetd進程： /etc/rc.d/init.d/inet restart 但是hosts.deny檔只能控制/etc/inetd.conf檔中包含的服務的訪問這些服務有/usr/bin/tcpd管 理。TCP wrapper監聽接入的網路請求，然後與在hosts.allow和hosts.deny的中的服務比較，然後做出允 許或拒絕的決定。但是對於wrapper沒有包含的服務你就需要採用其他方法了
+二、
+　　保護你的系統最簡單有效的的方法是TCP wrapper.Linux系統在跟蹤對你的機器的訪問記錄方面作了大量的工作。wrapper拒絕對你的系統的某些訪問的同時,系統在一些LOG檔中增加了一些資訊內容。在/var/log
+目錄下,一般可以看到如下檔：
+boot.log cron cron.1 cron.2 dmesg httpd
+lastlog lastlog.1 maillog maillog.1
+maillog.2
+messages messages.1 netconf.log
+netconf.log.1
+netconf.log.2 secure secure.1 secure.2
+secure.3 secure.4 spooler spooler.1 spooler.2
+uucp wtmp wtmp.1 xferlog xferlog.1
+xferlog.2
+　　可以看到某些LOG檔有1,2等副檔名。這是由於系統運行cron.daily引起的。實際上，cron.daily是在/etc下面的子目錄，包含了很多系統自動運行的管理script檔。不需要你參與，這些script實現一些任務的自動化：如輪轉log檔使其不會變的過分大。作為管理員你應該熟悉如何通過修改這些script來定時運行程式。當然，現在有很多功能完善的文本模式或圖形模式的log檔分析器，自動發現危險的攻擊跡象，然後象管理者發送信件。在http://www.freshmeat.net/、tucows等可以找到很多這樣的工具。
+　　從攻擊者的觀點而言，他們對你的你伺服器上的安全檔最感興趣。若你關閉外部網路對你的伺服器的訪問。你可能會遇到這樣的情況：
+[root@linux /]#grep refused /var/log/secure*
+Sep 12 07:52:42 netgate in.rlogind[7138]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:52:52 netgate in.rshd[7139]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:52:55 netgate in.rexecd[7144]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:52:59 netgate imapd[7146]: refused connect
+from 2??.?.5?.42
+Sep 12 07:52:59 netgate in.fingerd[7142]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:53:00 netgate ipop3d[7143]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:53:07 netgate in.ftpd[7147]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:53:10 netgate gn[7145]: refused connect
+from 2??.?.5?.?42
+Sep 12 07:53:22 netgate in.telnetd[7149]: refused
+connect from 2??.?.5?.?42
+Sep 12 07:56:34 netgate imapd[7150]: refused connect
+from 2??.?.5?.?42
+　　正如你看到的那樣，攻擊者已經試圖連接伺服器上的若干個埠。但是由於伺服器關閉了inetd啟動的所有服務，所以LOG系統記錄下了這些訪問拒絕。若在你的機器中沒有發現這樣的服務拒絕並不能說明你的機器沒有被攻擊。maillog檔將保存那些通過伺服器被轉發的email資訊。xferlog保存ftp的log資訊等等。
+　　若你希望查看wtmp，你可以使用last命令
+# last | more fishduck ttyp6 nexus Tue Sep 28 16:03
+still logged in birdrat ttyp5 speedy Tue Sep 28 15:57 still logged
+　　 in root tty1 Tue Sep 28 12:54 still logged in
+　　將顯示誰什麼時候登陸進來,登陸了多長時間等資訊。通過查看你可以發現非法登陸者資訊。 你也可以查看以前的wtmp檔如wtmp.1，你可以用命令： # last -f /var/log/wtmp.1 | more 但是你還需要注意你的log檔的狀態資訊，如果它特別小或者大小為0 則說明可能有攻擊者進入系統，並 且修改了這個檔。為了防止任何用戶修改某些檔，如對log檔只允許添加，而不允許刪除操作等等：可以通過使用Linux Intrusion Detection System可以防止攻擊者修改LOG檔password 檔等。該工具可以在啟動lilo時來決定是否允許對某些特定檔的修改。該工具的詳細資訊可以通過訪問 www.soaring-bird.com.cn/oss_proj/lids/index.html獲得。 系統的所有進程的祖父進程被成稱為'init'，其進程ID號是1。你可以通過下面的命令,看到init進程資訊。 # ps ax | grep init 1 ? S 6:03 init 系統在啟動時的init進程將會啟動'inetd'進程，正如前面提到的該進程實現監聽網路請求，監聽是通過網 絡埠號來實現的。例如你telnet到你的linux伺服器上時，實際上你上請求inetd進程啟動進程in.telnetd進程在23埠來處理你的訪問請求實現通信。隨後，in.telnetd進程啟動一個詢問你的用戶名和密碼的進程， 然後你就登陸到機器了。inetd同時監聽很多埠來等待訪問請求，然後啟動完成相關服務的程式。你可以通過查看檔/etc/services來看哪個服務使用哪個埠。從節省資源角度來說，利用一個進程而不是每種服務對應一個進程是有意義的。 當一個攻擊者第一次訪問你的站點時，他們往往使用成為埠掃描器的工具，通過該工具攻擊者來查看你開放了那些系統服務。LInux上比較出名的一個埠掃描器是nmap. 可以從http://www.insecure.org/nmap/index.html下載得到該軟體，最新的版本甚至有一個圖形化介面nmapfe。下面我們就運行nmap看可以得到什麼結果： 選項'-sS',指使用TCP SYN, 也就是半連接half-pen掃描, '-O',只同時探測被掃描系統的作業系統o。（利用OS指紋的技術，可以參見http://www.isbase.com/book/showQueryL.asp?libID=271）攻擊者知道了對方使用的何種作業系統就可以有針對性的尋找該作業系統的常見漏洞
+# nmap -sS -O localhost
+
+
+Starting nmap V. 2.3BETA5 by Fyodor (fyodor@dhp.com,
+www.insecure.org/nmap/)
+Interesting ports on localhost (127.0.0.1):
+Port State Protocol Service
+21 open tcp ftp
+23 open tcp telnet
+25 open tcp smtp
+53 open tcp domain
+79 open tcp finger
+80 open tcp http
+98 open tcp linuxconf
+111 open tcp sunrpc
+113 open tcp auth
+139 open tcp netbios-ssn
+513 open tcp login
+514 open tcp shell
+515 open tcp printer
+
+TCP Sequence Prediction: Class=random positive increments
+Difficulty=4360068 (Good luck!)
+Remote operating system guess: Linux 2.1.122 - 2.2.12
+
+Nmap run completed -- 1 IP address (1 host up) scanned in 2
+seconds
+　　這些打開的埠就是攻擊者入侵點。當你修改過inetd.conf檔以關閉某些服務，從新啟動inetd後，你 再用nmap掃描就可以發現被注釋掉的服務掃描不到了。
+　　當然，管理員還可以使用一些其他的安全掃描工具如：satan或Nessus等 來檢測自己的系統的安全可靠性，在攻擊者發現其以前更早的發現自己的系統的漏洞，並加以彌補。
+三、
+　　一個笑話裏說一個小偷進入到一家，偷光了屋子裏所有的東西，但是卻用一個相同的東西代替了偷走的東西。但是在網路世界裏，這卻是可能發生的。一個攻擊者利用一個系統漏洞非法入侵進入到你的系統後，當你使用ps命令列出系統中的所有的進程時，卻看不到什麼異常的證據。你查看你的password檔，一切也是那麼的正常。到底發生了什麼事情呢？當系統進入到你的系統以後，第一步要做的事情就是取代系統上某些特定的檔：如netstat命令等。當你使用netstat -a命令時，就不會顯示系統攻擊者存在的資訊。當然攻擊者將替代所有的可能洩露其存在的檔在linux環境下一個有名的這樣的工具包名字是rootkit。通過在任何一個搜索引擎搜索關鍵字rootkit可以得到數以百計的結果。這些工具一般來說包括：
+ps netstat top .....
+　　由於這些經過檔已經被取代。所以簡單的利用ls命令查看這些檔是看不出什麼破綻的。有若干種方法你可以驗證系統檔的完整性。如果你安裝的是Red Hat, Caldera, TurboLinux或任何使用RPM的系統。你可以利用RPM來驗證系統檔的完整性：首先你應該查明你的那些你需要查看的檔來自哪個套裝軟體，使用rpm命令你可以查明某個檔屬於某個包： # rpm -qf /bin/netstat net-tools-1.51-3 然後，可以掃描整個rpm包來查看那些發生了改變。對沒有發生改變的包使用該命令將沒有任何輸出資訊，如下所示：
+rpm -V net-tools
+　　將netstat的5.2版本的二進位可執行檔替換為6.0的版本以後再使用該命令的結果為：
+.......T /bin/netstat
+　　這說明/bin/netstat/檔已經被修改。若我使用rpm -qf測試ps和top命令可以得到其屬於包procps，然後再驗證包procps的完整性。下面是一個被'黑'的站點的結果：
+# rpm -qf /bin/ps procps.2.0.2-2
+# rpm -V procps
+SM5..UGT /bin/ps
+..UGT /usr/bin/top
+　　攻擊者入侵到系統中，並且用自己的ps及top命令替代了我們系統中的命令。從而使管理員看不到其運行的進程，也許是一個sniffer來監聽所有的用戶所有進出網路的資料並找尋到密碼資訊。下面是一個小的script來掃描你系統的所有的rpm庫，並檢查所有的包是否被篡改。但是應該注意的是並不是所有該scripts報告的問題都是說明該系統檔被攻擊者破壞。例如你的password檔一般肯定和你安裝系統時是不同的：
+#!/bin/bash
+#
+# Run through rpm database and report inconsistencies
+# for rpmlist in `rpm -qa`
+# These quotes are back quotes
+do echo ' ----- $rpmlist -----' ;
+rpm -V $rpmlist done > /tmp/rpmverify.out
+　　當你運行該scripts時，輸出被定向到檔/tmp/rpmverify.out你可以使用less命令查看該檔。但是由於文字檔案如：/etc/passwd, /etc/inetd.conf等很可能顯示為被修改過。但是你如何知道這些是管理員自己修改的還是入侵者修改的呢？方法是：
+　　在你確保你的系統是乾淨的，沒有被攻擊者入侵時，你為這些系統檔創建指紋資訊。在你懷疑你的系統被入侵時使用這些這些指紋資訊來判定系統是否被入侵。創建檔的指紋資訊是通過命令md5sum來實現的：
+# md5sum /etc/passwd
+d8439475fac2ea638cbad4fd6ca4bc22 /etc/passwd
+
+# md5sum /bin/ps
+6d16efee5baecce7a6db7d1e1a088813 /bin/ps
+
+# md5sum /bin/netsat
+b7dda3abd9a1429b23fd8687ad3dd551 /bin/netstat
+　　這些資料是我的系統上的檔的指紋資訊。不同的系統上的檔的 指紋資訊一般是不同的，你應該是使用md5sum來計算自己系統檔的指紋資訊。下面是一些你應該創建指紋資訊的檔；
+/usr/bin/passwd /sbin/portmap /bin/login /bin/ls
+/usr/bin/top /etc/inetd.conf /etc/services
+　　通過指紋資訊你可以決定是否有系統檔被篡改。
+四、
+　　上一節中說過，當netstat,ls等命令被修改，從而發現系統已經被入侵，下面該怎麼辦？根據你系統的重要性的不同，你有很多種選擇。但是我推薦對用戶目錄，password及其他關鍵的系統檔進行備份。然後重新安裝系統。但是不要隨便就將備份的檔拷貝到新系統，因為攻擊者可能在這些檔中隱藏一些非法的東西。
+　　也可以不重新安裝系統，而是通過TCP wrapper來限制對主機的訪問，並且關閉非關鍵的網路服務。然後更新被影響的包。重新'乾淨'的啟動系統是很重要的，但是要實現這點並不容易。若你發現procps或net-tools包已經被攻擊者修改，第一件事情是重新安裝乾淨的包來替換被攻擊者做了手腳留下後門的包。一般最好從你的系統發佈者處得到最新的包來重新安裝。
+　　一旦攻擊者進入到系統其就將在系統上存放一些工具並且將之隱藏起來，使你不容易發現。下面是一個被攻擊者入侵的系統的實例。當系統被攻擊者入侵，伺服器被限制網路訪問，並且替代所有的受影響的包。然後就需要通過仔細查看log檔來發現重複的企圖進入系統。查看/etc/passwd檔，發現一個不屬於合法的用戶。進入到該用戶的目錄下：/home/jon，運行 'ls -l'得到如下的內容：
+. .. .. .bashrc .bash_history .screenrc emech.tar.gz
+　　除了一個名字為emech.tar.gz的檔以外，看不出什麼異常現象。但是仔細觀察，你就會發現系統有兩個'..'目錄。(指該子目錄的上一級目錄)是的確很奇怪，我使用命令'cd ..'我就會進入到/home目錄。原來其中子目錄名字是在兩個點後面有一個空格。（'.. '）你可以通過如下命令發現：
+# cd /home/jon
+# echo .* | cat -v
+. .. .. .bashrc .bash_history .screenrc emech.tar.gz
+　　仔細觀察可以發現每個子目錄都是被一個空格隔開，而在第二個“..”和.bashrc之間有兩個空格。這就
+意味著第二個'..'子目錄其實為點-點-空格。下面進入到該目錄：
+# cd '.. '
+　　然後列出該目錄下的內容：
+#ls
+
+randfiles mech.set mech.pid checkmech cpu.memory
+mech.help mech.usage mech mech.levels emech.users psdevtab
+　　下一步我們再查看是否其還在其他地方隱藏了檔：
+# find / -user jon -print
+　　除了/home/jon目錄以外，還發現如下的內容；
+/usr/local/bin/.httpd
+/tmp/cl
+/tmp/.l/bcast
+/tmp/.l/.l
+/tmp/.l/imapd
+/tmp/.l/log
+/tmp/.l/pscan
+/tmp/.l/pscan.c
+/tmp/.l/rpc
+/tmp/.l/slice2
+/tmp/.l/sniffer
+/tmp/.l/sxploit
+/tmp/.l/thc
+/tmp/.l/ufs.c
+　　這個入侵者已經在系統上安裝了Sniffers、埠掃描器，他給自己營造了一個很好的'家' 。在查看中，還在合法的用戶的目錄下發現了一個可怕的名為'tcp.log'的文件。檔該檔有幾百行長，包括每一次telnet 及 ftp 出入該系統的連接！除了通告在該檔中出現的可能已經被入侵的機器管理員應該重新安裝系統以外，我同樣告訴他們需要更新系統的所有的用戶的口令。
+　　下面有一些例子來幫助你搜索隱藏的危險。首先查看位於用戶目錄的具有'suid'或'guid'的檔。這些檔的可執行屬性位元為s而不是x。如:
+#ls -s /usr/bni/passwd
+-r-s--x--x 1 root root 10704 Apr 14 1999 /usr/bin/passwd
+　　屬性第四位元的 's' 表示該命令被執行時，該進程的實際有效用戶ID就變為root用戶。為了允許普通用戶修改自己的密碼，這是必須的。第七位的x若為s則表示別的組的用戶若運行該程式則該程式則具有用戶所有組的有效組ID。使程式能冒充特定的用戶或者組並不是一件有害的事情。但是一般來說非管理用戶在其目錄下不應該具root-suid 程式。我們可以使用下面的命令來查尋這樣的檔：
+# find /home -perm -4000 -o -perm -2000 -print
+　　下一步我們繼續尋找入侵者留下的程式和檔，所以需要一個快速的尋找隱藏目錄的方法。下面的方法就是尋找如'.kde'的隱藏目錄。你也可以找到如'.. '或“...'等目錄：cracker.
+# find / -type d -name '.*' -print
+　　'-type d'選項指僅僅列出目錄。這個命令不會不會將'.'或'..'列出。
+五、
+　　作為一個好的系統管理者，為了擊敗攻擊者的攻擊行動，最好的方法是瞭解攻擊者的工作原理和機制。它們使用了那些工具，它們如何操作入侵等等。所以深入理解掌握我這裏講解的各種網路工具是很有必要的。
+　　上面用實例的方式說到了了一個攻擊者使用sniffer監聽網路流來搜集用戶名和密碼。下面我們就詳細說明sniffer是如何工作的。簡單的說，sniffer是一個使你能檢測你的網路介面接收到所有的資料報。一般情況下，電腦僅僅接受目的地址是自身的資料報，而sniffer使網路介面進入雜錯模式，從而可以接受網卡收到的所有的資料報。
+　　若你運行ifconfig eth0命令，會得到下面的結果：
+eth0 Link encap:Ethernet HWaddr 00:C0:4F:E3:C1:8F
+inet addr:192.168.22.2 Bcast:192.168.22.255 Mask:255.255.255.0
+UP BROADCAST RUNNING MULTICAST MTU:1500 Metric:1
+RX packets:49448 errors:0 dropped:0 overruns:0 frame:0
+TX packets:33859 errors:0 dropped:0 overruns:0 carrier:0
+collisions:6 txqueuelen:100
+Interrupt:10 Base address:0x300
+
+
+　　打開兩個終端，一個終端裏運行sniffer器-sniffit；
+# sniffit -i
+　　另外一個虛擬終端裏你可以再次運行ifconfig eth0。你將會發現輸出中有下面的內容：
+UP BROADCAST RUNNING PROMISC MULTICAST MTU:1500 Metric:1
+　　注意和上面相比較，增加了一個單詞'PROMISC' 這是雜錯模式(promiscuous mode)的縮寫,
+　　sniffit是一個羽量級的，基於終端的sniffer器。你可以從http://reptile.rug.ac.be/~coder/sniffit/sniffit.html得到它。
+　　另外一個類似的sniffer是netwatch,你可以從http://www.slctech.org/~mackay/netwatch.html得到它。
+　　如果你不希望在系統中安裝另外的sniffer，你可以使用系統中帶有的一個工具：tcpdump 這個工具雖然不如前面兩個工具那麼華麗，但是她可以完成所有同樣的功能。
+# tcpdump host www.linuxjournal.com -l | tee /tmp/tcpdump.out
+　　其中-l指示tcpdump將輸出資料存進入一個檔中。下面是輸出的內容：
+16:41:49.101002 www2.linuxjournal.com.www > marcel.somedomain.com.1432: F
+2303148464:2303148464(0) ack 1998428290 win 16352
+16:41:49.101206 marcel.somedomain.com.1432 > www2.linuxjournal.com.www: . ack
+1 win 32120 (DF)
+16:41:50.001024 www2.linuxjournal.com.www > marcel.somedomain.com.1429: F
+1805282316:1805282316(0) ack 1988937134 win 16352
+16:41:50.001215 marcel.somedomain.com.1429 > www2.linuxjournal.com.www: . ack
+1 win 32120 (DF)
+16:41:50.840998 www2.linuxjournal.com.www > marcel.somedomain.com.1431: F
+1539885010:1539885010(0) ack 1997163524 win 16352
+16:41:50.841198 marcel.somedomain.com.1431 > www2.linuxjournal.com.www: . ack
+1 win 32120 (DF)
+16:41:51.494356 marcel.somedomain.com.1429 > www2.linuxjournal.com.www: P
+1:335(334) ack 1 win 32120 (DF)
+16:41:51.497003 marcel.somedomain.com.1433 > www2.linuxjournal.com.www: S
+2019129753:2019129753(0) win 32120
+(DF)
+16:41:51.671023 www2.linuxjournal.com.www > marcel.somedomain.com.1429:R
+　　Linux系統中可以得到有很多種的sniffer。攻擊者在入侵系統以後，也許會使用修改的ps命令來隱藏其運行的sniffer器。或者將其改為一個看上去很正常的進程的名稱。
+
+----------------------------------------------------------------------------------------------------
+
+* Linux 網路安全技巧
+作者會員名﹕wangsb　　Email:wangshoub@yeah.net
+
+
+　　網絡安全是一個非常重要的課題,基本上你運行的服務後台越多,你就可能打開更多的安全漏洞.
+如果配置的恰當的話,Linux本身是非常安全可靠的,假使在Linux系統中有某個安全缺陷,
+由於Linux的源碼是開放的，有成千上萬的誌願者會立刻發現並修補它。
+本文旨在介紹用來增強你的網絡安全性的常用技巧,以Redhat Linux作為操作環境。
+
+1.操作系統內部的log file是檢測是否有網絡入侵的重要線索，
+當然這個假定你的logfile不被侵入者所破壞，如果你有台服務器用專線直接連到Internet上，
+這意味著你的IP地址是永久固定的地址，你會發現有很多人對你的系統做telnet/ftp登錄嘗試，
+試著運行#more /var/log/secure | grep refused 去檢查。
+
+2. 限製具有SUID權限標誌的程序數量，具有該權限標誌的程序以root身份運行，是一個潛在的安全漏洞，
+當然，有些程序是必須要具有該標誌的，象passwd程序。
+
+3.BIOS安全。設置BIOS密碼且修改引導次序禁止從軟盤啟動系統。
+
+4. 用戶口令。用戶口令是Linux安全的一個最基本的起點，很多人使用的用戶口令就是簡單的‘password，
+這等於給侵入者敞開了大門，雖然從理論上說沒有不能確解的用戶口令，只要有足夠的時間和資源可以利用。
+比較好的用戶口令是那些只有他自己能夠容易記得並理解的一串字符，並且絕對不要在任何地方寫出來。
+
+5./etc/exports 文件。如果你使用NFS網絡文件系統服務，那麼確保你的/etc/exports
+具有最嚴格的存取權限設置，這意味著不要使用任何通配符，不允許root寫權限，mount成只讀文件系統。
+編輯文件/etc/exports並且加﹕例如﹕
+　　/dir/to/export host1.mydomain.com(ro,root_squash)
+　　/dir/to/export host2.mydomain.com(ro,root_squash)
+　　/dir/to/export 是你想輸出的目錄，host.mydomain.com是登錄這個目錄的機器名，
+ro意味著mount成只讀系統，root_squash禁止root寫入該目錄。
+　　為了讓上面的改變生效，運行/usr/sbin/exportfs -a
+
+6.確信/etc/inetd.conf的所有者是root，且文件權限設置為600 。
+[root@deep]# chmod 600 /etc/inetd.conf
+ENSURE that the owner is root.
+[root@deep]# stat /etc/inetd.conf
+File: "/etc/inetd.conf"
+Size: 2869 Filetype: Regular File
+Mode: (0600/-rw-------) Uid: ( 0/ root) Gid: ( 0/ root)
+Device: 8,6 Inode: 18219 Links: 1
+Access: Wed Sep 22 16:24:16 1999(00000.00:10:44)
+Modify: Mon Sep 20 10:22:44 1999(00002.06:12:16)
+Change:Mon Sep 20 10:22:44 1999(00002.06:12:16)
+編輯/etc/inetd.conf禁止以下服務﹕
+ftp, telnet, shell, login, exec, talk, ntalk, imap, pop-2, pop-3, finger, auth, etc.
+除非你真的想用它。特別是禁止那些r命令.如果你用ssh/scp，那麼你也可以禁止掉telnet/ftp。
+為了使改變生效，運行#killall -HUP inetd 你也可以運行#chattr +i /etc/inetd.conf使該文件具有
+不可更改屬性。只有root 才能解開，用命令 #chattr -i /etc/inetd.conf
+
+7. TCP_WRAPPERS
+默認地，Redhat Linux允許所有的請求,用TCP_WRAPPERS增強你的站點的安全性是舉手之勞，你可以放入
+“ALL: ALL”到/etc/hosts.deny中禁止所有的請求，然後放那些明確允許的請求到/etc/hosts.allow中，
+如: sshd: 192.168.1.10/255.255.255.0 gate.openarch.com
+對IP地址192.168.1.10和主機名gate.openarch.com，允許通過ssh連接。配置完了之後，用tcpdchk檢查
+[root@deep]# tcpdchk
+tcpchk是TCP_Wrapper配置檢查工具，它檢查你的tcp wrapper配置並報告所有發現的潛在/存在的問題。
+
+8. 別名文件aliases
+編輯別名文件/etc/aliases（也可能是/etc/mail/aliases)，移走/注釋掉下面的行。
+# Basic system aliases -- these MUST be present.
+MAILER-DAEMON: postmaster
+postmaster: root
+# General redirections for pseudo accounts.
+bin: root
+daemon: root
+#games: root ?remove or comment out.
+#ingres: root ?remove or comment out.
+nobody: root
+#system: root ?remove or comment out.
+#toor: root ?remove or comment out.
+#uucp: root ?remove or comment out.
+# Well-known aliases.
+#manager: root ?remove or comment out.
+#dumper: root ?remove or comment out.
+#operator: root ?remove or comment out.
+# trap decode to catch security attacks
+#decode: root
+# Person who should get roots mail
+#root: marc
+最後更新後不要忘記運行/usr/bin/newaliases，使改變生效。
+
+9.阻止你的系統響應任何從外部/內部來的ping請求。
+既然沒有人能ping通你的機器並收到響應，你可以大大增強你的站點的安全性。
+你可以加下面的一行命令到/etc/rc.d/rc.local，以使每次啟動後自動運行。
+echo 1 > /proc/sys/net/ipv4/icmp_echo_ignore_all
+
+10. 不要顯示出操作系統和版本信息。
+如果你希望某個人遠程登錄到你的服務器時不要顯示操作系統和版本信息，你能改變
+/etc/inetd.conf中的一行象下面這樣﹕
+telnet stream tcp nowait root /usr/sbin/tcpd in.telnetd -h
+加-h標誌在最後使得telnet後台不要顯示系統信息，而僅僅顯示login:
+
+11.The /etc/host.conf file
+編輯host.conf文件(vi /etc/host.conf)且加下面的行﹕
+# Lookup names via DNS first then fall back to /etc/hosts.
+order bind,hosts
+# We don have machines with multiple IP addresses on the same card
+(like virtual server,IP Aliasing).
+multi off
+# Check for IP address spoofing.
+nospoof on
+IP Spoofing: IP-Spoofing is a security exploit that works by tricking
+computers in a trust relationship that you are someone that you really aren .
+
+12. The /etc/securetty file
+該文件指定了允許root登錄的tty設備，/etc/securetty被/bin/login程序讀取,
+它的格式是一行一個被允許的名字列表，如你可以編輯/etc/securetty且注釋出下面的行。
+tty1
+#tty2
+#tty3
+#tty4
+#tty5
+#tty6
+#tty7
+#tty8
+-意味著root僅僅被允許在tty1終端登錄。
+
+13. 特別的帳號
+禁止所有默認的被操作系統本身啟動的且不需要的帳號，當你第一次裝上系統時就應該做此檢查，
+Linux提供了各種帳號，你可能不需要，如果你不需要這個帳號，就移走它，你有的帳號越多，
+就越容易受到攻擊。
+為刪除你系統上的用戶，用下面的命令﹕
+[root@deep]# userdel username
+為刪除你系統上的組用戶帳號，用下面的命令﹕
+[root@deep]# groupdel username
+在終端上打入下面的命令刪掉下面的用戶。
+[root@deep]# userdel adm
+[root@deep]# userdel lp
+[root@deep]# userdel sync
+[root@deep]# userdel shutdown
+[root@deep]# userdel halt
+[root@deep]# userdel mail
+如果你不用sendmail服務器，procmail.mailx,就刪除這個帳號。
+[root@deep]# userdel news
+[root@deep]# userdel uucp
+[root@deep]# userdel operator
+[root@deep]# userdel games
+如果你不用X windows 服務器，就刪掉這個帳號。
+[root@deep]# userdel gopher
+[root@deep]# userdel ftp
+如果你不允許匿名FTP，就刪掉這個用戶帳號。
+===
+打入下面的命令刪除組帳號
+[root@deep]# groupdel adm
+[root@deep]# groupdel lp
+[root@deep]# groupdel mail
+如不用Sendmail服務器，刪除這個組帳號
+[root@deep]# groupdel news
+[root@deep]# groupdel uucp
+[root@deep]# groupdel games
+如你不用X Windows，刪除這個組帳號
+[root@deep]# groupdel dip
+[root@deep]# groupdel pppusers
+[root@deep]# groupdel popusers
+如果你不用POP服務器，刪除這個組帳號
+[root@deep]# groupdel slipusers
+====
+用下面的命令加需要的用戶帳號
+[root@deep]# useradd username
+用下面的命令改變用戶口令
+[root@deep]# passwd username
+用chattr命令給下面的文件加上不可更改屬性。
+[root@deep]# chattr +i /etc/passwd
+[root@deep]# chattr +i /etc/shadow
+[root@deep]# chattr +i /etc/group
+[root@deep]# chattr +i /etc/gshadow
+
+14. 阻止任何人su作為root.
+如果你不想任何人能夠su作為root,你能編輯/etc/pam.d/su加下面的行﹕
+auth sufficient /lib/security/pam_rootok.so debug
+auth required /lib/security/pam_wheel.so group=isd
+意味著僅僅isd組的用戶可以su作為root. 然後，如果你希望用戶admin能su作為root.就運行下面的命令。
+[root@deep]# usermod -G10 admin
+
+16. 資源限製
+對你的系統上所有的用戶設置資源限製可以防止DoS類型攻擊（denial of service attacks）如最大進程數，
+內存數量等。例如，對所有用戶的限製象下面這樣﹕
+編輯/etc/security/limits.con加﹕
+* hard core 0
+* hard rss 5000
+* hard nproc 20
+你也必須編輯/etc/pam.d/login文件加/檢查這一行的存在。
+session required /lib/security/pam_limits.so
+上面的命令禁止core files“core 0”，限製進程數為“nproc 50“，且限製內存使用
+為5M“rss 5000”。
+
+17. The /etc/lilo.conf file
+a) Add: restricted
+加這一行到每一個引導映像下面，就這表明如果你引導時用(linux single),則需要一個password.
+b) Add: password=some_password
+當與restricted聯合用，且正常引導時，需要用戶輸入密碼，你也要確保lilo.conf
+文件不能被不屬於root的用戶可讀，也免看到密碼明文。下面是例子﹕
+編輯/etc/lilo.conf加﹕
+====
+boot=/dev/sda
+map=/boot/map
+install=/boot/boot.b
+prompt
+timeout=50
+Default=linux
+restricted ?add this line.
+password=some_password ?add this line.
+image=/boot/vmlinuz-2.2.12-20
+label=linux
+initrd=/boot/initrd-2.2.12-10.img
+root=/dev/sda6
+read-only
+[root@deep]# chmod 600 /etc/lilo.conf (不再能被其他用戶可讀).
+[root@deep]# /sbin/lilo -v (更新lilo配置).
+[root@deep]# chattr +i /etc/lilo.conf（阻止該文件被修改）
+
+18. 禁止 Control-Alt-Delete 重啟動機器命令
+[root@deep]# vi /etc/inittab
+ca::ctrlaltdel:/sbin/shutdown -t3 -r now
+To
+#ca::ctrlaltdel:/sbin/shutdown -t3 -r now
+[root@deep]# /sbin/init q
+
+19. 重新設置/etc/rc.d/init.d/目錄下所有文件的許可權限
+[root@deep]# chmod -R 700 /etc/rc.d/init.d/*
+僅僅root可以讀，寫，執行上述所有script file.
+
+20. The /etc/rc.d/rc.local file
+默認地，當你login到linux server時，它告訴你linux版本名，內核版本名和服務器主機名。
+它給了你太多的信息，如果你就希望得到提示login: ,編輯/etc/rc.d/rc.local放#在下面的行前面﹕
+-- 
+# This will overwrite /etc/issue at every boot. So, make any changes you
+# want to make to /etc/issue here or you will lose them when you reboot.
+#echo "" > /etc/issue
+#echo "$R" >> /etc/issue
+#echo "Kernel $(uname -r) on $a $(uname -m)" >> /etc/issue
+#
+#cp -f /etc/issue /etc/issue.net
+#echo >> /etc/issue
+-- 
+然後，做下面的事情:
+[root@deep]# rm -f /etc/issue
+[root@deep]# rm -f /etc/issue.net
+[root@deep]# touch /etc/issue
+[root@deep]# touch /etc/issue.net
+
+21. 被root擁有的程序的位。
+移走那些被root擁有程序的s位標誌，當然有些程序需要這個，用命令‘chmod a-s’完成這個。
+注﹕前面帶（*）號的那些程序一般不需要擁有s位標誌。
+[root@deep]# find / -type f ( -perm -04000 -o -perm -02000 ) -exec ls 每lg {} ;
+-rwsr-xr-x 1 root root 33120 Mar 21 1999 /usr/bin/at
+*-rwsr-xr-x 1 root root 30560 Apr 15 20:03 /usr/bin/chage
+*-rwsr-xr-x 1 root root 29492 Apr 15 20:03 /usr/bin/gpasswd
+-rwsr-xr-x 1 root root 3208 Mar 22 1999 /usr/bin/disable-paste
+-rwxr-sr-x 1 root man 32320 Apr 9 1999 /usr/bin/man
+-r-s--x--x 1 root root 10704 Apr 14 17:21 /usr/bin/passwd
+-rws--x--x 2 root root 517916 Apr 6 1999 /usr/bin/suidperl
+-rws--x--x 2 root root 517916 Apr 6 1999 /usr/bin/sperl5.00503
+-rwxr-sr-x 1 root mail 11432 Apr 6 1999 /usr/bin/lockfile
+-rwsr-sr-x 1 root mail 64468 Apr 6 1999 /usr/bin/procmail
+-rwsr-xr-x 1 root root 21848 Aug 27 11:06 /usr/bin/crontab
+-rwxr-sr-x 1 root slocate 15032 Apr 19 14:55 /usr/bin/slocate
+*-r-xr-sr-x 1 root tty 6212 Apr 17 11:29 /usr/bin/wall
+*-rws--x--x 1 root root 14088 Apr 17 12:57 /usr/bin/chfn
+*-rws--x--x 1 root root 13800 Apr 17 12:57 /usr/bin/chsh
+*-rws--x--x 1 root root 5576 Apr 17 12:57 /usr/bin/newgrp
+*-rwxr-sr-x 1 root tty 8392 Apr 17 12:57 /usr/bin/write
+-rwsr-x--- 1 root squid 14076 Oct 7 14:48 /usr/lib/squid/pinger
+-rwxr-sr-x 1 root utmp 15587 Jun 9 09:30 /usr/sbin/utempter
+*-rwsr-xr-x 1 root root 5736 Apr 19 15:39 /usr/sbin/usernetctl
+*-rwsr-xr-x 1 root bin 16488 Jul 6 09:35 /usr/sbin/traceroute
+-rwsr-sr-x 1 root root 299364 Apr 19 16:38 /usr/sbin/sendmail
+-rwsr-xr-x 1 root root 34131 Apr 16 18:49 /usr/libexec/pt_chown
+-rwsr-xr-x 1 root root 13208 Apr 13 14:58 /bin/su
+*-rwsr-xr-x 1 root root 52788 Apr 17 15:16 /bin/mount
+*-rwsr-xr-x 1 root root 26508 Apr 17 20:26 /bin/umount
+*-rwsr-xr-x 1 root root 17652 Jul 6 09:33 /bin/ping
+-rwsr-xr-x 1 root root 20164 Apr 17 12:57 /bin/login
+*-rwxr-sr-x 1 root root 3860 Apr 19 15:39 /sbin/netreport
+-r-sr-xr-x 1 root root 46472 Apr 17 16:26 /sbin/pwdb_chkpwd
+[root@deep]# chmod a-s /usr/bin/chage
+[root@deep]# chmod a-s /usr/bin/gpasswd
+[root@deep]# chmod a-s /usr/bin/wall
+[root@deep]# chmod a-s /usr/bin/chfn
+[root@deep]# chmod a-s /usr/bin/chsh
+[root@deep]# chmod a-s /usr/bin/newgrp
+[root@deep]# chmod a-s /usr/bin/write
+[root@deep]# chmod a-s /usr/sbin/usernetctl
+[root@deep]# chmod a-s /usr/sbin/traceroute
+[root@deep]# chmod a-s /bin/mount
+[root@deep]# chmod a-s /bin/umount
+[root@deep]# chmod a-s /bin/ping
+[root@deep]# chmod a-s /sbin/netreport
+
+你可以用下面的命令查找所有帶s位標誌的程序﹕
+[root@deep]# find / -type f ( -perm -04000 -o -perm -02000 ) -exec ls -lg {} ;
+> suid-sgid-results
+把結果輸出到文件suid-sgid-results中。
+為了查找所有可寫的文件和目錄，用下面的命令﹕
+[root@deep]# find / -type f ( -perm -2 -o -perm -20 ) -exec ls -lg {} ; > ww-files-results
+[root@deep]# find / -type d ( -perm -2 -o -perm -20 ) -exec ls -ldg {} ; > ww-directories-results
+用下面的命令查找沒有擁有者的文件﹕
+[root@deep]# find / -nouser -o -nogroup > unowed-results
+用下面的命令查找所有的.rhosts文件﹕
+[root@deep]# find /home -name .rhosts > rhost-results
+
+
+----------------------------------------------------------------------------------------------------
+
+* Linux 禦敵策略談
+
+摘自：大陸新聞組
+From: pariah.bbs@bbs.cqupt.edu.cn (無痕)
+摘自：網絡衛士/www.netguard.com.cn/
+
+由于Linux 操作系統是一個開放源代碼的免費系統，因此，越來越受到用戶的
+歡迎。隨著Linux在我國的不斷普及，有關的政府部門更是將基于Linux開發具有自
+主版權的操作系統提高到保衛國家信息安全的高度來看待，因此，我們不難預測；
+Linux 在我國將得到更快更大的發展。而對于眾多習慣了Unix和Windows NT的系統
+管理員來講，如何保證Linux操作系統的安全將面臨許多新的挑戰。
+
+苦修內功
+
+第一步：安裝文件系統要分區
+在Linux 系統中，如果分別為不同的應用安裝單獨的主分區，再將關鍵的分區
+設置為只讀，將大大提高文件系統的安全性。
+1.文件分區
+Linux的文件系統可以分成幾個主要的分區，一般情況下至少要建立 /、/usr/
+local、/var和/home等幾個分區。其中/usr可以安裝成只讀並且可以被認為是不可
+修改的，如果/usr中有任何文件發生了改變，那麼系統將立即發出安全報警。/lib
+、/boot和/sbin的安裝和設置也一樣。在安裝時應該盡量將它們設置為只讀，這樣
+對它們的文件、目錄和屬性進行的任何修改都會導致系統報警。
+當然將所有主要的分區都設置為只讀是不可能的，有的分區如/var，其自身的
+性質就決定了不能將它設置為只讀，但應該不允許它具有執行權限。
+2.擴展ext2
+使用ext2文件系統上的只添加和不可變這兩種文件屬性，可以進一步提高文件
+系統的安全級別。一個標記為不可變的文件不能被修改，甚至不能被根用戶修改。
+一個標記為只添加的文件可以被修改，但只能在它的後面添加內容，即使根用戶也
+只能如此。
+如果你關鍵的文件系統安裝成只讀的，並且文件被標記為不可變的，入侵者必
+須重新安裝系統才能刪除這些不可變的文件，但這會立刻產生報警，這樣就大大減
+少了被非法入侵的危險。
+3.保護log文件
+當與log文件和log備份一起使用時，不可變和只添加這兩種文件屬性特別有用
+。系統管理員應該將活動的log文件屬性設置為只添加。當log文件被更新時，新產
+生的log 備份文件屬性應該設置成不可變的，而新的活動的文件屬性又變成了只添
+加。這通常需要在log更新腳本中添加一些控制命令。
+
+第二步：系統一定要備份
+在完成Linux 系統的安裝以後應該對整個系統進行備份，以後可以根據這個備
+份來驗證系統的完整性，這樣就可以發現系統文件是否被非法竄改過。如果發現系
+統文件已經被破壞，也可以使用備份來恢復系統。
+1.用CD-ROM備份
+當前最好的系統備份介質就是CD-ROM光盤，如果對安全級別的要求特別高，那
+麼可以將光盤設置為可啟動的，並且將驗證工作作為系統啟動過程的一部分。這樣
+只要通過光盤啟動，就說明系統尚未被破壞過。
+如果你創建了一個只讀的分區，那麼可以定期從光盤映像重新裝載它們。即使
+像/boot、/lib和/sbin這樣不能被安裝成只讀的分區，你仍然可以根據光盤映像來
+檢查它們，甚至可以在啟動時從另一個安全的映像重新下載它們。
+2.其它方式的備份
+雖然/etc中的許多文件經常會變化，但/etc中的許多內容仍然可以放到光盤上
+用于系統完整性驗證。其它不經常進行修改的文件，可以備份到另一個系統（如磁
+帶）或壓縮到一個只讀的目錄中。這種辦法可以在使用光盤映像進行驗證的基礎上
+，再進行額外的系統完整性檢查。
+
+第三步：改進內部安全機制
+通過改進Linux操作系統的內部功能， 可以防止緩衝區溢出攻擊，這種破壞力
+極強卻又最難預防的攻擊方式，雖然這樣的改進需要系統管理員具有相當豐富的經
+驗和技巧，但對于安全級別要求高的Linux系統來講還是很有必要的。
+1.Solaris Designer
+Solaris Designer為2.0版內核的安全Linux補丁提供了一個不可執行的棧，以
+減少緩衝區溢出的威脅，從而大大提高了整個系統的安全性。
+緩衝區溢出預防起來十分困難，系統管理員必須完全去掉緩衝區溢出存在的條
+件，才能防止這種方式的攻擊。正因為如此，許多人甚至包括Linux Torvalds本人
+也認為這個安全Linux補丁十分重要， 因為它防止了所有使用緩衝區溢出的攻擊。
+但是需要引起注意的是，這些補丁也會導致對執行棧的某些程序和庫的依賴問題，
+這些問題也給系統管理員帶來的新的挑戰。
+2.StackGuard
+StackGuard是一個十分強大的安全補丁工具。你可以使用經StackGuard修補過
+的gcc版本來重新編譯和鏈接關鍵的應用。
+StackGuard進行編譯時增加了棧檢查以防止發生棧攻擊緩衝區溢出，雖然這會
+導致系統的性能略有下降，但對于安全級別要求高的特定應用來講，StackGuard仍
+然是一個十分管用的工具。
+3.增加新的訪問控制功能
+Linux的2.3版內核正試圖在文件系統中實現一個訪問控制列表，這要求在原來
+的三類（Owner、Group和Other)訪問控制機制的基礎上再增加更詳細的訪問控制。
+在2.2和2.3 版的Linux內核中還將開發新的訪問控制功能，它最終將會影響當
+前有關ext2文件屬性的一些問題。與傳統的具有ext2文件系統相比，它提供了一個
+更加精確的安全控制功能。有了這個新的特性，應用程序將能夠在不具有超級用戶
+權限的情況下訪問某些系統資源，如初始套接等。
+
+巧禦外敵
+
+方法一：將入侵消滅在“萌芽”
+入侵者進行攻擊之前最常做的就是端號掃瞄，如果能夠及時發現和阻止入侵者
+的這種行為，那麼可以大大減少入侵事件的發生率。
+Abacus Port Sentry是開放源代碼的工具包，它能夠監視網絡接口，並且與防
+火牆交互操作來關閉端口掃瞄攻擊。
+Abacus Port Sentry能夠檢測到慢掃瞄（Slow Scan） ，但它不能檢測到結構
+化攻擊（Structured Attack）,這兩種方式的最終目的都是要試圖掩蓋攻擊意圖。
+正確地使用這個軟件將能夠有效地防止對IMAP服務大量的並行掃瞄，並且阻止所有
+這樣的入侵者。Abacus Sentry與Linux 2.2內核的IPChains工具一起使用時最有效
+，它能夠自動將所有的端口掃瞄行為定向到Port Sentry。
+當然更好的辦法就是使用專門的入侵檢測系統，但這樣的產品一般價格較高，
+普通用戶承受起來有困難。
+
+方法二：登錄服務器“單一化”
+將系統的登錄服務器移到一個單獨的機器中，會增加系統的安全級別，在大的
+Linux 網絡中，最好使用一個單獨的登錄服務器用于Syslog服務。更安全的登錄服
+務器會大大削弱入侵者透過登錄系統竄改日志文件的能力。
+1.安全Syslog
+即使使用單獨的登錄服務器，Linux 自身的Syslog工具也是相當不安全的。因
+此，有人開發了所謂的安全log服務器，將密碼簽名集成到日志中， 這會確保入侵
+者即使在竄改系統日志以後也無法做到不被發現。現在最常用于取代Syslog的安全
+log服務器稱為“安全Syslog”，用戶可以從Core SDI站點（http://www.core-sdi
+.com/ssylog）處下載這個工具。這個守護程序實現一個稱為PEQ-1的密碼協議來實
+現對系統日志的遠程審計。即使在入侵者獲得系統超級用戶權限的情況下也仍然可
+以進行審計，因為協議保證了以前以及入侵過程中的log 信息沒有審計者的通知無
+法被修改。
+2.第二代Syslog
+另一個取代Syslog的工具是Syslogs-ng（下一代的Syslog）。它提供了密碼簽
+名來檢測對日志文件的竄改。密碼安全登錄服務器和遠程審計功能可以使入侵者極
+難進行日志竄改並且很容易被檢測到。用戶可以從www.babit.hu/products/syslog
+-ng.html處下載這個工具。
+
+方法三：單一登錄系統更安全
+維護分散的大網絡環境中的多個用戶賬號對于系統管理員來講是一件非常頭疼
+的事情。現在有一些單一的登錄（Sign On） 系統不僅可以減輕管理員的負擔，而
+且同時還提高了安全級別。
+1.NIS
+網絡信息服務（NIS）是一個很好的單一登錄系統，它是在 Sun 公司的Yellow
+Page服務的基礎上發展起來的 ，它的基本安全特性不夠健壯。NIS的更新版本NIS+
+，對原NIS的不足進行了改進，現在已經有了用于Linux的NIS+版本。
+2.Kerberos
+Kerberos也是一種非常有名的單一登錄系統。Kerberos V4 存在一些安全漏洞
+，Ketberos V5對此進行了改進。
+
+方法四：用陷阱和蜜罐誘敵深入
+所謂陷阱就是激活時能夠觸發報警事件的軟件，而蜜罐（honeypot）程序是指
+設計用來引誘有入侵企圖者觸發專門報警的陷阱程序。
+通過設置陷阱和蜜罐程序，一旦出現入侵事件，系統就可以很快發出報警。
+在許多大的網絡中，一般都設計有專門的陷井程序。陷阱程序一般分為兩種：
+一種是只發現入侵者而不對其採取報復行動，另一種是同時採取報復行動。
+設置蜜罐的一種常用方法是故意聲稱Linux系統使用了具有許多脆弱性的 IMAP
+服務器版本。當入侵者對這些IMAP服務器進行大容量端口掃瞄，就會落入陷阱並且
+激發系統報警。
+另一個蜜罐陷阱的例子就是很有名的 phf，它是一個非常脆弱的Webcgi-bin腳
+本。最初的phf是設計來查找電話號碼的，但它有一個嚴重的安全漏洞： 允許入侵
+者使用它來獲得系統口令文件或執行其它惡意操作。系統管理員可以設置一個假的
+phf腳本，但是它不是將系統的口令文件發送給入侵者， 而是向入侵者返回一些假
+信息並且同時向系統管理員發出報警。
+另外一類蜜罐陷阱程序可以通過在防火牆中將入侵者的IP地址設置為黑名單來
+立即拒絕入侵者繼續進行訪問。拒絕不友好的訪問既可以是短期的，也可以是長期
+的。Linux內核中的防火牆代碼非常適合于這樣做。
+摘自 網絡衛士/www.netguard.com.cn/
+
+
+----------------------------------------------------------------------------------------------------
+
+* Linux 安全設置
+
+摘自：大陸新聞組
+From: kan.bbs@bbs.whu.edu.cn (meteor)
+
+如今，系統的安全變的越來越重要了，這裡，我想把我平時比較常使用的一些
+linux下的基本的安全措施寫出來和大家探討一下，讓我們的Linux系統變得可靠。
+
+1、BIOS的安全設置
+這是最基本的了，也是最簡單的了。一定要給你的BIOS設置密碼，以防止通過
+在BIOS中改變啟動順序，而可以從軟盤啟動。這樣可以阻止別有用心的試圖用特殊
+的啟動盤啟動你的系統，還可以阻止別人進入BIOS改動其中的設置，使機器的硬件
+設置不能被別人隨意改動。
+
+2、LILO的安全設置
+LILO是LInux LOader的縮寫，它是LINUX的啟動模塊。以通過修改“/etc/lilo
+.conf”文件中的內容來進行配置。在/etc/lilo.conf 文件中，加如下面兩個參數
+：restricted,password 。這三個參數可以使你的系統在啟動lilo時就要求密碼驗
+證。
+第一步：編輯lilo.conf文件（vi /etc/lilo.comf），假如或改變這三個參數
+：
+boot=/dev/hda
+map=/boot/map
+install=/boot/boot.b
+prompt
+timeout=00 # 把這行該為00，這樣系統啟動時將不在等待，而直接啟動LINUX
+message=/boot/message
+linear
+default=linux
+restricted #加入這行
+password= # 加入這行並設置自己的密碼
+image=/boot/vmlinuz-2.4.2-2
+label=linux
+root=/dev/hda6
+read-only
+第二步：因為"/etc/lilo.conf"文件中包含明文密碼，所以要把它設置為root
+權限讀取。
+# chmod 0600 /etc/lilo.conf
+第三步：更新系統，以便對“/etc/lilo.conf”文件做的修改起作用。
+# /sbin/lilo -v
+第四步：使用“chattr”命令使"/etc/lilo.conf"文件變為不可改變。
+# chattr +i /etc/lilo.conf
+這樣可以在一定程度上防止對“/etc/lilo.conf”任何改變（意外或其他原因
+）。
+
+3、讓口令更加安全
+口令可以說是系統的第一道防線，目前網上的大部分對系統的攻擊都是從截獲
+口令或者猜測口令開始的，所以我們應該選擇更加安全的口令。
+首先要杜絕不設口令的帳號存在。這可以通過查看/etc/passwd 文件發現。例
+如，存在的用戶名為test的帳號，沒有設置口令，則在/etc/passwd 文件中就有如
+下一行：
+test::100:9::/home/test:/bin/bash
+其第二項為空，說明test這個帳號沒有設置口令，這是非常危險的！應將該類
+帳號刪除或者設置口令。
+其次，在舊版本的linux中，在/etc/passwd文件中是包含有加密的密碼的，這
+就給系統的安全性帶來了很大的隱患，最簡單的方法就是可以用暴力破解的方法來
+獲得口令。可以使用命令/usr/sbin/pwconv或者 /usr/sbin/grpconv 來建立/etc/
+shadow或者/etc/gshadow 文件，這樣在/etc/passwd文件中不再包含加密的密碼，
+而是放在/etc/shadow文件中，該文件只有超級用戶root可讀！
+第三點是修改一些系統帳號的Shell變量，例如uucp、ftp和news等，還有一些
+僅僅需要FTP功能的帳號，一定不要給他們設置/bin/bash或者/bin/sh等Shell變量
+。可以在/etc/passwd中將它們的Shell變量置空， 例如設為/bin/false或者/dev/
+null等，也可以使用usermod -s /dev/null username命令來更改username的Shell
+為/dev/null。這樣使用這些帳號將無法Telnet遠程登錄到系統中來！
+第四點是修改缺省的密碼長度：在你安裝linux時默認的密碼長度是5個字節。
+但這並不夠，要把它設為8。修改最短密碼長度需要編輯login.defs文件（vi/etc/
+login.defs），把下面這行
+PASS_MIN_LEN 5
+改為
+PASS_MIN_LEN 8
+login.defs文件是login程序的配置文件。
+
+4、自動注銷帳號的登錄
+在unix系統中root賬戶是具有最高特權的。如果系統管理員在離開系統之前忘
+記注銷root賬戶，那將會帶來很大的安全隱患，應該讓系統會自動注銷。通過修改
+賬戶中“TMOUT”參數，可以實現此功能。TMOUT按秒計算。 編輯你的profile文件
+（vi /etc/profile）,在"HISTFILESIZE="後面加入下面這行：
+TMOUT=300
+300，表示300秒，也就是表示5分鐘。這樣，如果系統中登陸的用戶在5分鐘內
+都沒有動作，那麼系統會自動注銷這個賬戶。 你可以在個別用戶的“.bashrc”文
+件中添加該值，以便系統對該用戶實行特殊的自動注銷時間。
+改變這項設置後，必須先注銷用戶，再用該用戶登陸才能激活這個功能。
+
+5、取消普通用戶的控制台訪問權限
+你應該取消普通用戶的控制台訪問權限，比如shutdown、reboot、halt等命令
+。
+# rm -f /etc/security/console.apps/
+是你要注銷的程序名。
+
+6、取消並反安裝所有不用的服務
+取消並反安裝所有不用的服務，這樣你的擔心就會少很多。察看“/etc/inetd
+.conf”文件，通過注釋取消所有你不需要的服務（在該服務項目之前加一個“#”
+）。然後用“sighup”命令升級“inetd.conf”文件。
+第一步：
+更改“/etc/inetd.conf”權限為600，只允許 oot來讀寫該文件。
+# chmod 600 /etc/inetd.conf
+第二步：
+確定“/etc/inetd.conf”文件所有者為root。
+第三步：
+編輯 /etc/inetd.conf文件（vi /etc/inetd.conf），取消下列服務（你不需
+要的）：ftp、telnet、shell、login、exec、talk、ntalk、imap、pop-2、pop-3
+、finger、auth等等。把不需要的服務關閉可以使系統的危險性降低很多。
+第四步：
+給inetd進程發送一個HUP信號：
+# killall -HUP inetd
+第五步：
+用chattr命令把/ec/inetd.conf文件設為不可修改，這樣就沒人可以修改它：
+# chattr +i /etc/inetd.conf
+這樣可以防止對inetd.conf的任何修改（以外或其他原因）。唯一可以取消這
+個屬性的人只有root。如果要修改inetd.conf文件，首先要是取消不可修改性質：
+# chattr -i /etc/inetd.conf
+別忘了該後再把它的性質改為不可修改的。
+
+7、TCP_WRAPPERS
+使用TCP_WRAPPERS可以使你的系統安全面對外部入侵。最好的策略就是阻止所
+有的主機（"/etc/hosts.deny"文件中加入"ALL: ALL@ALL, PARANOID" ），然後再
+在"/etc/hosts.allow" 文件中加入所有允許訪問的主機列表。
+第一步：
+編輯hosts.deny文件（vi /etc/hosts.deny），加入下面這行
+# Deny access to everyone.
+ALL: ALL@ALL, PARANOID
+這表明除非該地址包在允許訪問的主機列表中，否則阻塞所有的服務和地址。
+第二步：
+編輯hosts.allow文件（vi /etc/hosts.allow），加入允許訪問的主機列表，
+比如：
+ftp: 202.54.15.99 foo.com
+202.54.15.99和 foo.com是允許訪問ftp服務的ip地址和主機名稱。
+第三步：
+tcpdchk程序是tepd wrapper設置檢查程序。它用來檢查你的tcp wrapper設置
+，並報告發現的潛在的和真實的問題。設置完後，運行下面這個命令：
+# tcpdchk
+
+8、修改“/etc/host.conf”文件
+“/etc/host.conf”說明了如何解析地址。編輯“/etc/host.conf”文件（vi
+/etc/host.conf），加入下面這行：
+# Lookup names via DNS first then fall back to /etc/hosts.
+order bind,hosts
+# We have machines with multiple IP addresses.
+multi on
+# Check for IP address spoofing.
+nospoof on
+第一項設置首先通過DNS解析IP地址，然後通過hosts文件解析。第二項設置檢
+測是否“/etc/hosts”文件中的主機是否擁有多個IP地址（比如有多個以太口網卡
+）。第三項設置說明要注意對本機未經許可的電子欺騙。
+
+9、使“/etc/services”文件免疫
+使“/etc/services”文件免疫，防止未經許可的刪除或添加服務：
+# chattr +i /etc/services
+
+10、不允許從不同的控制台進行root登陸
+“/etc/securetty” 文件允許你定義root用戶可以從那個TTY設備登陸。你可
+以編輯“/etc/securetty”文件，再不需要登陸的TTY設備前添加“#”標志，來禁
+止從該TTY設備進行root登陸。
+在/etc/inittab文件中有如下一段話：
+# Run gettys in standard runlevels
+1:2345:respawn:/sbin/mingetty tty1
+2:2345:respawn:/sbin/mingetty tty2
+#3:2345:respawn:/sbin/mingetty tty3
+#4:2345:respawn:/sbin/mingetty tty4
+#5:2345:respawn:/sbin/mingetty tty5
+#6:2345:respawn:/sbin/mingetty tty6
+系統默認的可以使用6個控制台，即Alt+F1、Alt+F2...，這裡在3，4，5，6前
+面加上“#”， 注釋該句話，這樣現在只有兩個控制台可供使用，最好保留兩個。
+然後重新啟動init進程，改動即可生效！
+
+11、使用PAM（可插拔認證模塊）禁止任何人通過su命令改變為root用戶 su（
+Substitute User 替代用戶）命令允許你成為系統中其他已存在的用戶。如果你不
+希望任何人通過su命令改變為root用戶或對某些用戶限制使用su命令，你可以在su
+配置文件（在"/etc/pam.d/"目錄下）的開頭添加下面兩行：
+編輯su文件(vi /etc/pam.d/su)，在開頭添加下面兩行：
+auth sufficient /lib/security/pam_rootok.so
+auth required /lib/security/Pam_wheel.so group=wheel
+這表明只有“wheel”組的成員可以使用su命令成為root用戶。 你可以把用戶
+添加到“wheel”組，以使它可以使用su命令成為root用戶。 添加方法可以用這個
+命令：chmod -G10 username。
+
+12、Shell logging Bash
+shell在“~/.bash_history”（“~/”表示用戶目錄） 文件中保存了500條使
+用過的命令，這樣可以使你輸入使用過的長命令變得容易。每個在系統中擁有賬號
+的用戶在他的目錄下都有一個“.bash_history”文件。bash shell 應該保存少量
+的命令，並且在每次用戶注銷時都把這些歷史命令刪除。
+第一步：
+“/etc/profile”文件中的“HISTFILESIZE”和“HISTSIZE”行確定所有用戶
+的“bash_history”文件中可以保存的舊命令條數。強烈建議把把“/etc/profile
+”文件中的“HISTFILESIZE”和“HISTSIZE”行的值設為一個較小的數，比如30。
+編輯profile文件（vi/etc/profile），把下面這行改為：
+HISTFILESIZE=30
+HISTSIZE=30
+這表示每個用戶的“.bash_history”文件只可以保存30條舊命令。
+第二步：
+網管還應該在"/etc/skel/.bash_logout" 文件中添加下面這行"rm -f $HOME/
+.bash_history" 。這樣，當用戶每次注銷時，“.bash_history”文件都會被刪除
+。
+編輯.bash_logout文件(vi /etc/skel/.bash_logout) ，添加下面這行：
+rm -f $HOME/.bash_history
+
+13、禁止Control-Alt-Delete鍵盤關閉命令
+在"/etc/inittab" 文件中注釋掉下面這行（使用#）：
+ca::ctrlaltdel:/sbin/shutdown -t3 -r now
+改為：
+#ca::ctrlaltdel:/sbin/shutdown -t3 -r now
+為了使這項改動起作用，輸入下面這個命令：
+# /sbin/init q
+
+14、給"/etc/rc.d/init.d" 下script文件設置權限
+給執行或關閉啟動時執行的程序的script文件設置權限。
+# chmod -R 700 /etc/rc.d/init.d/*
+這表示只有root才允許讀、寫、執行該目錄下的script文件。
+
+15、隱藏系統信息
+在缺省情況下，當你登陸到linux系統，它會告訴你該linux發行版的名稱、版
+本、內核版本、服務器的名稱。對于黑客來說這些信息足夠它入侵你的系統了。你
+應該只給它顯示一個“login:”提示符。
+首先編輯"/etc/rc.d/rc.local" 文件，在下面顯示的這些行前加一個“#”，
+把輸出信息的命令注釋掉。
+# This will overwrite /etc/issue at every boot. So, make any changes
+# you want to make to /etc/issue here or you will lose them when you
+# reboot.
+#echo "" > /etc/issue
+#echo "$R" >> /etc/issue
+#echo "Kernel $(uname -r) on $a $(uname -m)" >> /etc/issue
+#
+#cp -f /etc/issue /etc/issue.net
+#echo >> /etc/issue
+其次刪除"/etc"目錄下的“isue.net”和"issue"文件：
+# rm -f /etc/issue
+# rm -f /etc/issue.net
+
+16、禁止不使用的SUID/SGID程序
+如果一個程序被設置成了SUID
+root，那麼普通用戶就可以以root身份來運行這個程序。網管應盡可能的少使
+用SUID/SGID 程序，禁止所有不必要的SUID/SGID程序。
+查找root-owned程序中使用s位的程序：
+# find / -type f ( -perm -04000 -o -perm -02000 ) -exec ls -lg {} ;
+用下面命令禁止選中的帶有s位的程序：
+# chmod a-s [program]
+以上這些都是一些維護系統安全所需要的一些基本的比較簡單的步驟，要想讓
+你的系統更加安全，還需要做很多，如配置OpenSSL等， 維護系統的穩定和安全是
+一個持續的長久的工作，需要花大量的時間和精力。這裡僅僅列出一些我平時工作
+的一些心得，和大家交流一下！
+
+
+----------------------------------------------------------------------------------------------------

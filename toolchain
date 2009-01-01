@@ -1,0 +1,1404 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 使用 toolchain 編 kernel module 的注意事項
+
+	必須加上 -I/path/to/要使用的kernel source 所在目錄/include, 否則, 編出來的 module 版本是以當初編 toolchain 所用的 kernel source header file 為準.
+
+----------------------------------------------------------------------------------------------------
+
+* 看巨集展開後的 C 原始碼
+
+	gcc -E foo_bar.c
+
+----------------------------------------------------------------------------------------------------
+
+* 看gcc預設參數
+
+	echo 'int main() { }' | gcc -E -v -
+
+----------------------------------------------------------------------------------------------------
+
+* 編 gcc 時參數說明
+
+Reading from the docs shouldn't be a bad idea... Either 'www.gnu.org' or the install docs
+coming with GCC should tell this:
+
+--with-newlib -- Specifies that "newlib" is being used as the target C library. This causes
+                 __eprintf to be omitted from libgcc.a on the assumption that it will be
+                 provided by newlib. 
+
+Sometimes reading only the wrong docs can be a bad idea, also the 'www.gnu-org' docs have bugs,
+like the famous:
+
+--with-headers=dir -- Specifies a directory which has target include files. This options is
+                required when building a cross compiler, if ${prefix}/${target}/sys-include
+                doesn't pre-exist.
+
+which clashes with the GCC-manual, the install docs coming with GCC, with glibc sources with
+most cross-compiler installations etc. But the GCC sources have adapted this bug.
+
+
+----------------------------------------------------------------------------------------------------
+
+* 在編 gcc3.3+glibc2.3.2時
+
+	glibc2.3.2有超多的BUG的，不過有找到一個網站http://kegel.com/crosstool/，提供glibc2.3.2的修補檔。有空再試試。
+
+----------------------------------------------------------------------------------------------------
+
+* 看configure時是否有問題
+
+	直接看configure後的軟體各目錄下的config.log檔案即可得知。
+
+----------------------------------------------------------------------------------------------------
+
+* cross compiling 失敗時...
+
+	make CFLAGS="-v -O" 並看看編譯程式出現的參數等資料研判問題。
+
+	或
+
+	${TARGET}-gcc -print-search-dirs 
+
+----------------------------------------------------------------------------------------------------
+
+* 編TOOLCHAIN(全部檔案均從ftp.ntust.edu.tw/unix/GNU下載) （失敗）
+
+	0. linux kernel source tree
+		tar xjvf linux-2.4.19.tar.bz2
+		cd linux-2.4.19
+		bzcat patch-2.4.19-rmk7.bz2 | patch -p1
+		zcat diff-2.4.19-rmk7-pxa2.gz | patch -p1
+		make lubbock_config oldconfig dep
+
+		其中/tmp/hdl/arm-elf-linux等於${PREFIX}/${TARGET}
+		mkdir /tmp/hdl/arm-elf-linux/include
+		cp -R include/linux /tmp/hdl/arm-elf-linux/include/
+		cp -R include/asm-arm/ /tmp/hdl/arm-elf-linux/include/
+		若不執行上述三個命令，以後cross compile gcc編出來後執行 echo 'main() {}' | arm-elf-linux-gcc -E -v - 會出現ignoring nonexistent directory "/tmp/hdl/arm-elf-linux/include"
+
+
+	1. binutils (2.14)
+
+			cd build-binutils/
+			../binutils-2.14/configure --prefix=/tmp/hdl --target=arm-elf-linux
+			make
+			make install
+			export PATH=/tmp/hdl/bin:$PATH
+
+	2. bootstrap gcc (3.3)
+	
+		上 inhibit_libc patch 含 -D__gthr_posix_h （注意，gthr前是兩個底線）  關於這一點我似乎記錯了，應該兩個都要加上才算inhibit_libc patch
+		../gcc-3.3/configure --prefix=/tmp/hdl --target=arm-elf-linux --without-headers --with-newlib --enable-languages=c --disable-threads --disable-shared
+		make all-gcc (YES! 沒有出現ERROR)
+		make install-gcc
+
+		註：最後兩個步驟改用make all及make install好像也沒什麼問題
+
+		註：經過測試，--without-headers換成--with-headers=/tmp/hdl/linux-2.4.19/include也沒問題 （linux-2.4.19內是rmk7-pxa2）
+
+	3. glibc
+		tar xjvf glibc-2.3.2.tar.bz2
+		tar xzvf glibc-crypt-2.1.tar.gz -C glibc-2.3.2
+		tar xjvf glibc-linuxthreads-2.3.2.tar.bz2 -C glibc-2.3.2
+		cd build-glibc
+		../glibc-2.3.2/configure --prefix=/tmp/hdl --target=arm-elf-linux --enable-add-ons
+
+		失敗，不用再額外加glibc-crypt了
+
+		tar xjvf glibc-2.3.2.tar.bz2
+		tar xjvf glibc-linuxthreads-2.3.2.tar.bz2 -C glibc-2.3.2
+		cd build-glibc
+		../glibc-2.3.2/configure --prefix=/tmp/hdl --target=arm-elf-linux --enable-add-ons
+		make (未出現錯誤訊息)
+		make install
+		把/tmp/hdl/lib/libc.so內GROUP開頭那一列後方所有檔案的路徑從絕對路徑改成相對路徑（把每一個路徑前第一個/刪除）。這樣才算安裝好glibc。
+
+==================================================	
+		
+		後來發現編出來的library是386平台的版本，改用下列命令configure（追加--with-headers，因為INSTALL文件內寫若不指定則預設使用/usr/include; 另外，在Building Embedded Linux System CH4.2看到，要用--host=arm-elf-linux而不是--target=arm-elf-linux）
+
+
+		
+		../glibc-2.3.2/configure --prefix=/tmp/hdl --host=arm-elf-linux --enable-add-ons --with-headers=/tmp/hdl/linux-2.4.19/include/
+		make
+
+		發生錯誤
+
+gcc ../sysdeps/unix/sysv/linux/init-first.c -c -std=gnu99 -O2 -Wall -Winline -Wstrict-prototypes -Wwrite-strings -g      -I../include -I. -I/tmp/hdl/build-glibc/csu -I.. -I../libio  -I/tmp/hdl/build-glibc -I../sysdeps/i386/elf -I../linuxthreads/sysdeps/unix/sysv/linux/i386 -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/i386/i686 -I../linuxthreads/sysdeps/i386 -I../sysdeps/unix/sysv/linux/i386 -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv/i386 -I../sysdeps/unix/sysv -I../sysdeps/unix/i386 -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/i386/i686/fpu -I../sysdeps/i386/i686 -I../sysdeps/i386/i486 -I../sysdeps/i386/fpu -I../sysdeps/i386 -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/ldbl-96 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /usr/lib/gcc-lib/i386-redhat-linux/3.2.2/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h       -DHAVE_INITFINI -o /tmp/hdl/build-glibc/csu/init-first.o
+In file included from /tmp/hdl/linux-2.4.19/include/linux/param.h:4,
+                 from ../sysdeps/unix/sysv/linux/sys/param.h:24,
+                 from ../sysdeps/unix/sysv/linux/init-first.c:26:
+/tmp/hdl/linux-2.4.19/include/asm/param.h:13:45: asm/arch/param.h: No such file or directory
+/tmp/hdl/linux-2.4.19/include/asm/param.h:14:57: asm/proc/page.h: No such file or directory
+make[2]: *** [/tmp/hdl/build-glibc/csu/init-first.o] Error 1
+make[2]: Leaving directory `/tmp/hdl/glibc-2.3.2/csu'
+make[1]: *** [csu/subdir_lib] Error 2
+make[1]: Leaving directory `/tmp/hdl/glibc-2.3.2'
+make: *** [all] Error 2
+
+		經過檢查，include/asm/arch及proc並沒有連結到該連結的地方，以DBPXA250來說，應該分別連到arch-pxa及proc-armv。然而奇怪的是，再重新執行下列命令後連結就出現了。
+		make lubbock_config
+		make oldconfig
+		make dep
+
+		重新回到build-glibc目錄
+
+		make ==> 產生下列錯誤訊息
+gcc init-misc.c -c -std=gnu99 -O2 -Wall -Winline -Wstrict-prototypes -Wwrite-strings -g      -I../include -I. -I/tmp/hdl/build-glibc/misc -I.. -I../libio  -I/tmp/hdl/build-glibc -I../sysdeps/i386/elf -I../linuxthreads/sysdeps/unix/sysv/linux/i386 -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/i386/i686 -I../linuxthreads/sysdeps/i386 -I../sysdeps/unix/sysv/linux/i386 -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv/i386 -I../sysdeps/unix/sysv -I../sysdeps/unix/i386 -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/i386/i686/fpu -I../sysdeps/i386/i686 -I../sysdeps/i386/i486 -I../sysdeps/i386/fpu -I../sysdeps/i386 -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/ldbl-96 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /usr/lib/gcc-lib/i386-redhat-linux/3.2.2/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h       -o /tmp/hdl/build-glibc/misc/init-misc.o
+(echo '#include <sysdep.h>'; \
+ echo 'PSEUDO (ioperm, ioperm, 3)'; \
+ echo ' ret'; \
+ echo 'PSEUDO_END(ioperm)'; \
+ echo 'libc_hidden_def (ioperm)'; \
+) | gcc -c  -I../include -I. -I/tmp/hdl/build-glibc/misc -I.. -I../libio  -I/tmp/hdl/build-glibc -I../sysdeps/i386/elf -I../linuxthreads/sysdeps/unix/sysv/linux/i386 -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/i386/i686 -I../linuxthreads/sysdeps/i386 -I../sysdeps/unix/sysv/linux/i386 -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv/i386 -I../sysdeps/unix/sysv -I../sysdeps/unix/i386 -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/i386/i686/fpu -I../sysdeps/i386/i686 -I../sysdeps/i386/i486 -I../sysdeps/i386/fpu -I../sysdeps/i386 -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/ldbl-96 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /usr/lib/gcc-lib/i386-redhat-linux/3.2.2/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h       -DASSEMBLER  -DGAS_SYNTAX  -x assembler-with-cpp -o /tmp/hdl/build-glibc/misc/ioperm.o -
+make[2]: *** No rule to make target `/tmp/hdl/build-glibc/misc/iopl.o', needed by `/tmp/hdl/build-glibc/misc/stamp.o'.  Stop.
+make[2]: Leaving directory `/tmp/hdl/glibc-2.3.2/misc'
+make[1]: *** [misc/subdir_lib] Error 2
+make[1]: Leaving directory `/tmp/hdl/glibc-2.3.2'
+make: *** [all] Error 2
+
+		在 configure 多加了--build=i686-pc-linux-gnu (註，在網路上找到的解答)
+
+		../glibc-2.3.2/configure --prefix=/tmp/hdl --build=i686-pc-linux-gnu --host=arm-elf-linux --enable-add-ons --with-headers=/tmp/hdl/linux-2.4.19/include/		
+		make
+
+		上述問題消失了，但是出現下列錯誤訊息
+
+arm-elf-linux-gcc ../sysdeps/posix/killpg.c -c -std=gnu99 -O2 -Wall -Winline -Wstrict-prototypes -Wwrite-strings -g      -I../include -I. -I/tmp/hdl/build-glibc/signal -I.. -I../libio  -I/tmp/hdl/build-glibc -I../sysdeps/arm/elf -I../linuxthreads/sysdeps/unix/sysv/linux/arm -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/arm -I../sysdeps/unix/sysv/linux/arm -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv -I../sysdeps/unix/arm -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/arm/fpu -I../sysdeps/arm -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /tmp/hdl/lib/gcc-lib/arm-elf-linux/3.3/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h       -o /tmp/hdl/build-glibc/signal/killpg.o
+arm-elf-linux-gcc ../linuxthreads/sysdeps/pthread/sigaction.c -c -std=gnu99 -O2 -Wall -Winline -Wstrict-prototypes -Wwrite-strings -g      -I../include -I. -I/tmp/hdl/build-glibc/signal -I.. -I../libio  -I/tmp/hdl/build-glibc -I../sysdeps/arm/elf -I../linuxthreads/sysdeps/unix/sysv/linux/arm -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/arm -I../sysdeps/unix/sysv/linux/arm -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv -I../sysdeps/unix/arm -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/arm/fpu -I../sysdeps/arm -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /tmp/hdl/lib/gcc-lib/arm-elf-linux/3.3/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h       -o /tmp/hdl/build-glibc/signal/sigaction.o
+In file included from ../linuxthreads/sysdeps/pthread/sigaction.c:53,
+                 from ../linuxthreads/sysdeps/pthread/sigaction.c:53,
+                 from ../linuxthreads/sysdeps/pthread/sigaction.c:29:
+../sysdeps/unix/sysv/linux/arm/sigaction.c: In function `__libc_sigaction':
+../sysdeps/unix/sysv/linux/arm/sigaction.c:100: error: asm-specifier for variable `_a1' conflicts with asm clobber list
+../sysdeps/unix/sysv/linux/arm/sigaction.c:139: error: asm-specifier for variable `_a1' conflicts with asm clobber list
+make[2]: *** [/tmp/hdl/build-glibc/signal/sigaction.o] Error 1
+make[2]: Leaving directory `/tmp/hdl/glibc-2.3.2/signal'
+make[1]: *** [signal/subdir_lib] Error 2
+make[1]: Leaving directory `/tmp/hdl/glibc-2.3.2'
+make: *** [all] Error 2
+
+		在http://gcc.rgai.hu/glibc-mails/mail1.php 找到解決方法(用../sysdeps/unix/sysv/linux/arm/sigaction.c:100: error: asm-specifier for variable `_a1' conflicts with asm clobber list到google找)。這是glibc-2.3.2的BUG，請執行以下修補
+
+RCS file: /cvs/glibc/libc/sysdeps/unix/sysv/linux/arm/sysdep.h,v
+retrieving revision 1.22
+diff -u -r1.22 sysdep.h
+--- sysdeps/unix/sysv/linux/arm/sysdep.h	23 Mar 2003 19:42:22 -0000	1.22
++++ sysdeps/unix/sysv/linux/arm/sysdep.h	24 Mar 2003 13:23:16 -0000
+@@ -174,7 +174,7 @@
+        asm volatile ("swi	%1	@ syscall " #name	\
+ 		     : "=r" (_a1)				\
+ 		     : "i" (SYS_ify(name)) ASM_ARGS_##nr	\
+-		     : "a1", "memory");				\
++		     : "memory");				\
+        _sys_result = _a1;					\
+      }								\
+      (int) _sys_result; })
+
+		手動修改glibc-2.3.2/sysdeps/unix/sysv/linux/arm/sysdep.h, 把第161列左右，即上述: "a1", "memory");改成: "memory");
+		不過我覺得很奇怪，刪掉"a1"後大括弧的層次不就錯了？不管了，先make吧。
+		回到build-glibc ==> make
+		嗚........好慘呀........又有錯誤訊息了。
+
+arm-elf-linux-gcc sscanf.c -c -std=gnu99 -O2 -Wall -Winline -Wstrict-prototypes -Wwrite-strings -g      -I../include -I. -I/tmp/hdl/build-glibc/stdio-common -I.. -I../libio  -I/tmp/hdl/build-glibc -I../sysdeps/arm/elf -I../linuxthreads/sysdeps/unix/sysv/linux/arm -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/arm -I../sysdeps/unix/sysv/linux/arm -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv -I../sysdeps/unix/arm -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/arm/fpu -I../sysdeps/arm -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /tmp/hdl/lib/gcc-lib/arm-elf-linux/3.3/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h       -D_IO_MTSAFE_IO -o /tmp/hdl/build-glibc/stdio-common/sscanf.o
+sscanf.c:31: warning: conflicting types for built-in function `sscanf'
+sscanf.c: In function `sscanf':
+sscanf.c:37: error: `va_start' used in function with fixed args
+make[2]: *** [/tmp/hdl/build-glibc/stdio-common/sscanf.o] Error 1
+make[2]: Leaving directory `/tmp/hdl/glibc-2.3.2/stdio-common'
+make[1]: *** [stdio-common/subdir_lib] Error 2
+make[1]: Leaving directory `/tmp/hdl/glibc-2.3.2'
+make: *** [all] Error 2
+
+		在http://archive.linuxfromscratch.org/mail-archives/lfs-support/2003/06/0135.html找到解答(用sscanf.c:31: warning: conflicting types for built-in function `sscanf'當關鍵字到google找)，又是GLIBC2.3.2的BUG了，上以下PATCH
+glibc-2.3.2-sscanf.patch
+
+--- stdio-common/sscanf.c.~1.8.~ 2003-01-16 11:25:20.000000000 +0100
++++ stdio-common/sscanf.c 2003-03-05 12:07:34.000000000 +0100
+@@ -1,4 +1,4 @@
+-/* Copyright (C) 1991,95,96,98,2002 Free Software Foundation, Inc.
++/* Copyright (C) 1991,95,96,98,2002, 2003 Free Software
+Foundation, Inc.
+     This file is part of the GNU C Library.
+
+     The GNU C Library is free software; you can redistribute it
+and/or
+@@ -27,9 +27,7 @@
+  /* Read formatted input from S, according to the format string
+FORMAT. */
+  /* VARARGS2 */
+  int
+-sscanf (s, format)
+- const char *s;
+- const char *format;
++sscanf (const char *s, const char *format, ...)
+  {
+    va_list arg;
+    int done; 
+
+	 修改glibc-2.3.2/stdio-comm/sscanf.c,到第30列，把
+
+	 sscanf (s, format)
+	  const char *s;
+	  const char *format;
+
+	 改成
+
+	 sscanf (const char *s, const char *format, ...)
+
+	 回到build-glibc ==> make
+	 嗚........還是有問題哪......我怎麼這麼倒楣，選到有這麼多BUG的版本。錯誤訊息如下：
+arm-elf-linux-gcc ../sysdeps/posix/waitid.c -c -std=gnu99 -O2 -Wall -Winline -Wstrict-prototypes -Wwrite-strings -g  -pg    -I../include -I. -I/tmp/hdl/build-glibc/posix -I.. -I../libio  -I/tmp/hdl/build-glibc -I../sysdeps/arm/elf -I../linuxthreads/sysdeps/unix/sysv/linux/arm -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/arm -I../sysdeps/unix/sysv/linux/arm -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv -I../sysdeps/unix/arm -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/arm/fpu -I../sysdeps/arm -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /tmp/hdl/lib/gcc-lib/arm-elf-linux/3.3/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h  -DPROF      -o /tmp/hdl/build-glibc/posix/waitid.op
+(echo '#include <sysdep.h>'; \
+ echo 'PSEUDO (alarm, alarm, 1)'; \
+ echo ' ret'; \
+ echo 'PSEUDO_END(alarm)'; \
+ echo 'libc_hidden_def (alarm)'; \
+) | arm-elf-linux-gcc -c  -I../include -I. -I/tmp/hdl/build-glibc/posix -I.. -I../libio  -I/tmp/hdl/build-glibc -I../sysdeps/arm/elf -I../linuxthreads/sysdeps/unix/sysv/linux/arm -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/arm -I../sysdeps/unix/sysv/linux/arm -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv -I../sysdeps/unix/arm -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/arm/fpu -I../sysdeps/arm -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /tmp/hdl/lib/gcc-lib/arm-elf-linux/3.3/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h  -DPROF      -DASSEMBLER   -x assembler-with-cpp -o /tmp/hdl/build-glibc/posix/alarm.op -
+arm-elf-linux-gcc ../sysdeps/unix/sysv/linux/sleep.c -c -std=gnu99 -O2 -Wall -Winline -Wstrict-prototypes -Wwrite-strings -g  -pg    -I../include -I. -I/tmp/hdl/build-glibc/posix -I.. -I../libio  -I/tmp/hdl/build-glibc -I../sysdeps/arm/elf -I../linuxthreads/sysdeps/unix/sysv/linux/arm -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/arm -I../sysdeps/unix/sysv/linux/arm -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv -I../sysdeps/unix/arm -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/arm/fpu -I../sysdeps/arm -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /tmp/hdl/lib/gcc-lib/arm-elf-linux/3.3/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h  -DPROF      -o /tmp/hdl/build-glibc/posix/sleep.op
+(echo '#include <sysdep-cancel.h>'; \
+ echo 'PSEUDO (__libc_pause, pause, 0)'; \
+ echo ' ret'; \
+ echo 'PSEUDO_END(__libc_pause)'; \
+ echo 'libc_hidden_def (__libc_pause)'; \
+ echo 'weak_alias (__libc_pause, pause)'; \
+ echo 'libc_hidden_weak (pause)'; \
+) | arm-elf-linux-gcc -c  -I../include -I. -I/tmp/hdl/build-glibc/posix -I.. -I../libio  -I/tmp/hdl/build-glibc -I../sysdeps/arm/elf -I../linuxthreads/sysdeps/unix/sysv/linux/arm -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/arm -I../sysdeps/unix/sysv/linux/arm -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv -I../sysdeps/unix/arm -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/arm/fpu -I../sysdeps/arm -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /tmp/hdl/lib/gcc-lib/arm-elf-linux/3.3/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h  -DPROF      -DASSEMBLER   -x assembler-with-cpp -o /tmp/hdl/build-glibc/posix/pause.op -
+<stdin>: Assembler messages:
+<stdin>:2: Error: garbage following instruction -- `ldr lr,[sp],#4 ldr ip,=__libc_multiple_threads'
+make[2]: *** [/tmp/hdl/build-glibc/posix/pause.op] Error 1
+make[2]: Leaving directory `/tmp/hdl/glibc-2.3.2/posix'
+make[1]: *** [posix/subdir_lib] Error 2
+make[1]: Leaving directory `/tmp/hdl/glibc-2.3.2'
+make: *** [all] Error 2
+
+	在http://sources.redhat.com/ml/bug-glibc/2003-05/msg00076.html找到修補檔
+
+diff -urN glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h glibc-2.3.2-sysdep_cancel/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
+--- glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Sun Jan 12 11:13:57 2003
++++ glibc-2.3.2-sysdep_cancel/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Wed May 14 14:16:49 2003
+@@ -34,7 +34,7 @@
+ # define PSEUDO(name, syscall_name, args)				\
+   .section ".text";							\
+     PSEUDO_PROLOGUE;							\
+-  ENTRY (name)								\
++  ENTRY (name);								\
+     SINGLE_THREAD_P_INT;						\
+     bne .Lpseudo_cancel;						\
+     DO_CALL (syscall_name, args);					\
+
+  PATCH 1: Replace "lr" with "reg"
+
+diff -urN glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h glibc-2.3.2-sysdep-cancel-lr/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
+--- glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Sun Jan 12 11:13:57 2003
++++ glibc-2.3.2-sysdep-cancel-lr/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Mon May 19 14:17:49 2003
+@@ -110,7 +110,7 @@
+   ldr reg, 2b;								\
+ 3:									\
+   add ip, pc, ip;							\
+-  ldr ip, [ip, lr];							\
++  ldr ip, [ip, reg];							\
+   teq ip, #0;
+ #   define SINGLE_THREAD_P_INT						\
+   str lr, [sp, $-4]!;							\
+
+  PATCH 2: Reworked doargs
+
+diff -urN glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h glibc-2.3.2-sysdep-cancel-doargs/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
+--- glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Mon May 19 14:23:32 2003
++++ glibc-2.3.2-sysdep-cancel-doargs/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Mon May 19 14:24:55 2003
+@@ -24,6 +24,15 @@
+ 
+ #if !defined NOT_IN_libc || defined IS_IN_libpthread
+ 
++/* We push lr onto the stack, so we have to use ldmib instead of ldmia
++   to find the saved arguments.  */
++#undef DOARGS_5
++#undef DOARGS_6
++#undef DOARGS_7
++#define DOARGS_5 str r4, [sp, $-4]!; ldr r4, [sp, $8];
++#define DOARGS_6 mov ip, sp; stmfd sp!, {r4, r5}; ldmib ip, {r4, r5};
++#define DOARGS_7 mov ip, sp; stmfd sp!, {r4, r5, r6}; ldmib ip, {r4, r5, r6};
++
+ # undef PSEUDO_RET
+ # define PSEUDO_RET						        \
+     ldrcc pc, [sp], $4;	
+
+	再度回到build-glibc ==> make
+	但是glibc2.3.2不放過我，再次的錯誤訊息。
+arm-elf-linux-gcc   -nostdlib -nostartfiles -r -o /tmp/hdl/build-glibc/elf/librtld.map.o '-Wl,-(' /tmp/hdl/build-glibc/elf/dl-allobjs.os /tmp/hdl/build-glibc/libc_pic.a -lgcc '-Wl,-)' -Wl,-Map,/tmp/hdl/build-glibc/elf/librtld.mapT
+/tmp/hdl/lib/gcc-lib/arm-elf-linux/3.3/../../../../arm-elf-linux/bin/ld: Relocatable linking with relocations from format elf32-little (/tmp/hdl/build-glibc/libc_pic.a(errno-loc.os)) to format elf32-littlearm (/tmp/hdl/build-glibc/elf/librtld.map.o) is not supported
+collect2: ld returned 1 exit status
+make[2]: *** [/tmp/hdl/build-glibc/elf/librtld.map] Error 1
+make[2]: Leaving directory `/tmp/hdl/glibc-2.3.2/elf'
+make[1]: *** [elf/subdir_lib] Error 2
+make[1]: Leaving directory `/tmp/hdl/glibc-2.3.2'
+make: *** [all] Error 2
+
+	我累了.....另外去抓CVS上最新的glibc
+	cvs cvs -z 9 -d :pserver:anoncvs@sources.redhat.com:/cvs/glibc login (密碼anoncvs)
+	cvs -z 9 -d :pserver:anoncvs@sources.redhat.com:/cvs/glibc co libc
+	哇........從學校下載超慢的........改用家中的WinCVS卻又無法login, 除非改用家中的linux。
+	別人編好的armlinux toolchain中glibc是用2.2.5版，試試這一版好了。
+
+		../glibc-2.2.5/configure --prefix=/tmp/hdl --build=i686-pc-linux-gnu --host=arm-elf-linux --enable-add-ons --with-headers=/tmp/hdl/linux-2.4.19/include/
+		make
+
+		這一版本的glibc真是爭氣，馬上就有錯誤訊息了。
+arm-elf-linux-gcc ../sysdeps/unix/sysv/linux/init-first.c -c -O2 -Wall -Winline -Wstrict-prototypes -Wwrite-strings -g      -I../include -I. -I/tmp/hdl/build-glibc-2.2.5/csu -I.. -I../libio  -I/tmp/hdl/build-glibc-2.2.5 -I../sysdeps/arm/elf -I../linuxthreads/sysdeps/unix/sysv/linux -I../linuxthreads/sysdeps/pthread -I../sysdeps/pthread -I../linuxthreads/sysdeps/unix/sysv -I../linuxthreads/sysdeps/unix -I../linuxthreads/sysdeps/arm -I../sysdeps/unix/sysv/linux/arm -I../sysdeps/unix/sysv/linux -I../sysdeps/gnu -I../sysdeps/unix/common -I../sysdeps/unix/mman -I../sysdeps/unix/inet -I../sysdeps/unix/sysv -I../sysdeps/unix/arm -I../sysdeps/unix -I../sysdeps/posix -I../sysdeps/arm/fpu -I../sysdeps/arm -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754 -I../sysdeps/generic/elf -I../sysdeps/generic  -nostdinc -isystem /tmp/hdl/lib/gcc-lib/arm-elf-linux/3.3/include -isystem /tmp/hdl/linux-2.4.19/include/ -D_LIBC_REENTRANT -include ../include/libc-symbols.h     -DHAVE_INITFINI -o /tmp/hdl/build-glibc-2.2.5/csu/init-first.o
+In file included from ../include/pthread.h:1,
+                 from ../linuxthreads/sysdeps/pthread/bits/libc-lock.h:23,
+                 from ../sysdeps/generic/ldsodefs.h:34,
+                 from ../sysdeps/unix/sysv/linux/ldsodefs.h:25,
+                 from ../sysdeps/unix/sysv/linux/init-first.c:32:
+../linuxthreads/sysdeps/pthread/pthread.h:163: error: parse error before "__thread"
+../linuxthreads/sysdeps/pthread/pthread.h:165: error: `pthread_create' declared as function returning a function
+../linuxthreads/sysdeps/pthread/pthread.h:165: warning: function declaration isn't a prototype
+../linuxthreads/sysdeps/pthread/pthread.h:166: error: parse error before "void"
+../linuxthreads/sysdeps/pthread/pthread.h:591: error: storage class specified for parameter `type name'
+In file included from ../linuxthreads/sysdeps/pthread/pthread.h:655,
+                 from ../include/pthread.h:1,
+                 from ../linuxthreads/sysdeps/pthread/bits/libc-lock.h:23,
+                 from ../sysdeps/generic/ldsodefs.h:34,
+                 from ../sysdeps/unix/sysv/linux/ldsodefs.h:25,
+                 from ../sysdeps/unix/sysv/linux/init-first.c:32:
+../linuxthreads/sysdeps/unix/sysv/linux/bits/sigthread.h:36: error: storage class specified for parameter `type name'
+make[2]: *** [/tmp/hdl/build-glibc-2.2.5/csu/init-first.o] Error 1
+make[2]: Leaving directory `/tmp/hdl/glibc-2.2.5/csu'
+make[1]: *** [csu/subdir_lib] Error 2
+make[1]: Leaving directory `/tmp/hdl/glibc-2.2.5'
+make: *** [all] Error 2
+
+
+		註：節錄glibc-2.3.2原始碼內INSTALL中一段話
+
+`--build=BUILD-SYSTEM'
+`--host=HOST-SYSTEM'
+     These options are for cross-compiling.  If you specify both
+     options and BUILD-SYSTEM is different from HOST-SYSTEM, `configure'
+     will prepare to cross-compile glibc from BUILD-SYSTEM to be used
+     on HOST-SYSTEM.  You'll probably need the `--with-headers' option
+     too, and you may have to override CONFIGURE's selection of the
+     compiler and/or binutils.
+
+	4. gcc (3.3) (不要export LD_LIBRARY_PATH)
+		去除inhibit_libc hack
+		cd build-gcc
+		../gcc-3.3/configure --prefix=/tmp/hdl/ --target=arm-elf-linux
+		make
+
+		出現下列錯誤訊息
+
+		/tmp/hdl/arm-elf-linux/bin/ld: cannot open crti.o: No such file or directory
+		collect2: ld returned 1 exit status
+		make[2]: *** [libgcc_s.so] Error 1
+		make[2]: Leaving directory `/tmp/hdl/build-gcc/gcc'
+		make[1]: *** [libgcc.a] Error 2
+		make[1]: Leaving directory `/tmp/hdl/build-gcc/gcc'
+		make: *** [all-gcc] Error 2
+
+		試過把/tmp/hdl/lib加入/etc/ld.so.conf重編，會出現同樣的訊息。
+
+		已經到了連結階段才出這個問題，在Building Embedded Linux System 一書中提到在編AP時在Makefile之中定義兩個變數，一個指向crtl.o及crti.o放在最後要連結好的檔案最前方；另一個crtn.o則是放在連結好的檔案最後方。
+
+		../gcc-3.3/configure --prefix=/tmp/hdl/ --target=arm-elf-linux ; make ==> 出現同樣的錯誤訊息
+
+		configure 再加上 --with-libs ==> 同樣的錯誤訊息
+
+		試過在LDFLAGS後方加上-Wl,-L /tmp/hdl/lib ==> 同樣的錯誤訊息
+
+		在 http://sources.redhat.com/ml/crossgcc/2001-02/msg00045.html 找到一篇關於cross compiling armlinux的文章
+
+Your problem arises from the need to produce a shared libgcc. Earlier libgcc was always
+static, 'libgcc.a', so no linking with the startups was needed...
+
+ I remember there being now a '--disable-shared-libgcc' or something to prevent producing
+the shared libgcc. This could be the workaround...
+
+		../gcc-3.3/configure --prefix=/tmp/hdl/ --target=arm-elf-linux --disable-shared-libgcc ; make ==> 還是不行，查過gcc-3.3/INSTALL/檔案，根本沒有--disable-shared-libgcc這個參數。雖然有--enable-shared=[packages...]，但是--disable-shared無法指定是哪一個套件要變成static，一定要全部變static。
+
+		configure 後加上 --enable-languages=c,c++也一樣沒用 :(
+
+		後來無意發現，在/tmp/hdl/lib下不只是crt*.o，所有的library全部都是i386平台格式。WHY!? 我在編譯glibc 時明明指定target是arm-elf-linux了呀！
+
+		crt1.o:                   ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
+		crti.o:                   ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
+		crtn.o:                   ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
+
+		
+
+		
+		
+
+	5. gdb (5.3)
+
+
+	使用編好的toolchain前注意事項
+
+	1. 把當初configure時--prefix指定的路徑下的bin加入PATH變數
+	2. 把當初configure時--prefix指定的路徑下的lib加入LD_LIBRARY_PATH變數或直接加入/etc/ld.so.conf (這句話暫時保留, 還不是很確定是不是加入 LD_LIBRARY_PATH)
+	3. 若需要man pages則將--prefix指定路徑下man加入MANPATH變數
+	4. 若要讀編出來的info則可以：
+		1. 使用 info 時加上-d參數，後方空一格加上--prefix指定路徑下info目錄，讓info可以搜尋到。
+		2. 直接info -f 檔案名
+
+
+----------------------------------------------------------------------------------------------------
+
+* 這次測試編譯toolchain使用Building Embedded Linux System作者推薦的各軟體版本 （失敗，或許是沒有照作者的方法做）
+
+	0. 準備 Linux Kernel Source Code 及 header file
+		tar xjvf linux-2.4.19.tar.bz2
+		mv linux-2.4.19 linux-2.4.19-rmk7-pxa2
+		cd linux-2.4.19-rmk7-pxa2
+		bzcat patch-2.4.19-rmk7.bz2 | patch -p1
+		zcat diff-2.4.19-rmk7-pxa2.gz | patch -p1
+		make lubbock_config 
+		make oldconfig 
+		make dep
+
+		其中/tmp/hdl/arm-elf-linux等於${PREFIX}/${TARGET}
+		mkdir -p /tmp/hdl/arm-elf-linux/include
+		cp -R include/linux /tmp/hdl/arm-elf-linux/include/
+		cp -R include/asm-arm/ /tmp/hdl/arm-elf-linux/include/ ==> 錯了，應該複製為 asm 目錄
+		cp -R include/asm-generic/ /tmp/hdl/arm-elf-linux/include/
+
+	1. binutils
+		cd build-binutils/
+		../binutils-2.10.1/configure --prefix=/tmp/hdl --target=arm-elf-linux
+		make
+		make install
+		export PATH=/tmp/hdl/bin:$PATH
+
+	2. bootstrap gcc
+		上 inhibit_libc patch 含 -D__gthr_posix_h （注意，gthr前是兩個底線）  關於這一點我似乎記錯了，應該兩個都要加上才算inhibit_libc patch
+		../gcc-2.95.3/configure --prefix=/tmp/hdl --target=arm-elf-linux --with-headers=/tmp/hdl/linux-2.4.19-rmk7-pxa2/include --with-newlib --enable-languages=c --disable-threads --disable-shared
+		make all-gcc (YES! 沒有出現ERROR)
+		make install-gcc
+
+		註：--with-newlib 是表示編譯時還沒有或不打算採用glibc；並不是指定C Library要採用RedHat的newlib。
+
+	3. glibc
+		tar xjvf glibc-2.1.3.tar.bz2
+		tar xzvf glibc-crypt-2.1.tar.gz -C glibc-2.1.3
+		tar xjvf glibc-linuxthreads-2.1.3.tar.bz2 -C glibc-2.1.3
+		cd build-glibc
+		../glibc-2.1.3/configure --prefix=/tmp/hdl --build=i686-pc-linux-gnu --host=arm-elf-linux --enable-add-ons --with-headers=/tmp/hdl/linux-2.4.19-rmk7-pxa2/include/
+		make
+		make install 出現以下錯誤訊息
+
+./stdio.texi:2491: First argument to cross-reference may not be empty.
+./stdio.texi:2492: First argument to cross-reference may not be empty.
+makeinfo: Removing output file `/tmp/hdl/glibc-2.1.3/manual/libc.info' due to errors; use --force to preserve.
+make[2]: *** [libc.info] Error 2
+make[2]: Leaving directory `/tmp/hdl/glibc-2.1.3/manual'
+make[1]: *** [manual/subdir_install] Error 2
+make[1]: Leaving directory `/tmp/hdl/glibc-2.1.3'
+make: *** [install] Error 2
+
+		在 http://www.embeddedtux.org/pipermail/etux/2003-June/000058.html 找到解答，修改glibc-2.1.3/manual/stdio.texi 第2491列、2492列。把@ref={, , ,都改成@ref={Top, , ,
+
+		make install 成功
+		用 file /tmp/hdl/lib/* 檢查，的確是編出ARM平台的library。
+
+	4. gcc
+		去除inhibit_libc hack
+		cd build-gcc
+		../gcc-2.95.3/configure --prefix=/tmp/hdl/ --target=arm-elf-linux
+		make 出現下列錯誤訊息
+
+make[3]: Entering directory `/tmp/hdl/build-gcc-2.95.3/gcc'
+rm -f tmplibgcc2.a
+for name in _muldi3 _divdi3 _moddi3 _udivdi3 _umoddi3 _negdi2 _lshrdi3 _ashldi3 _ashrdi3 _ffsdi2 _udiv_w_sdiv _udivmoddi4 _cmpdi2 _ucmpdi2 _floatdidf _floatdisf _fixunsdfsi _fixunssfsi _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __gcc_bcmp _varargs __dummy _eprintf _bb _shtab _clear_cache _trampoline __main _exit _ctors _pure; \
+do \
+  echo ${name}; \
+  /tmp/hdl/build-gcc-2.95.3/gcc/xgcc -B/tmp/hdl/build-gcc-2.95.3/gcc/ -B/tmp/hdl/arm-elf-linux/bin/ -I/tmp/hdl/arm-elf-linux/include -O2  -DCROSS_COMPILE -DIN_GCC     -g -O2 -I./include  -fomit-frame-pointer -fPIC -g0 -DHAVE_GTHR_DEFAULT -DIN_LIBGCC2 -D__GCC_FLOAT_NOT_NEEDED    -I. -I../../gcc-2.95.3/gcc -I../../gcc-2.95.3/gcc/config -I../../gcc-2.95.3/gcc/../include -c -DL${name} \
+       ../../gcc-2.95.3/gcc/libgcc2.c -o ${name}.o; \
+  if [ $? -eq 0 ] ; then true; else exit 1; fi; \
+  arm-elf-linux-ar rc tmplibgcc2.a ${name}.o; \
+  rm -f ${name}.o; \
+done
+_muldi3
+../../gcc-2.95.3/gcc/libgcc2.c:41: stdlib.h: No such file or directory
+../../gcc-2.95.3/gcc/libgcc2.c:42: unistd.h: No such file or directory
+make[3]: *** [libgcc2.a] Error 1
+make[3]: Leaving directory `/tmp/hdl/build-gcc-2.95.3/gcc'
+make[2]: *** [stmp-multilib-sub] Error 2
+make[2]: Leaving directory `/tmp/hdl/build-gcc-2.95.3/gcc'
+make[1]: *** [stmp-multilib] Error 1
+make[1]: Leaving directory `/tmp/hdl/build-gcc-2.95.3/gcc'
+make: *** [all-gcc] Error 2
+
+		../gcc-2.95.3/configure --prefix=/tmp/hdl/ --target=arm-elf-linux --with-headers=/tmp/hdl/linux-2.4.19-rmk7-pxa2 (補上--with-headers=XXX參數)
+		make ==> 錯誤一樣
+
+		../gcc-2.95.3/configure --prefix=/tmp/hdl/ --target=arm-elf-linux --with-headers=/tmp/hdl/include (把--with-headers改成指向glibc的include目錄, 因為上述訊息是說找不到C Library的header file。而且以echo 'main () {}' | /tmp/hdl/bin/arm-elf-linux-gcc -E -v -來看，linux kernel header file已經在搜尋路徑之中，沒必要再用--with-headers加入了)
+		make ==> 出現錯誤訊息，不過已經解決上一個錯誤了。
+
+make[2]: Entering directory `/tmp/hdl/build-gcc-2.95.3/arm-elf-linux/libiberty'
+make[2]: *** No targets specified and no makefile found.  Stop.
+make[2]: Leaving directory `/tmp/hdl/build-gcc-2.95.3/arm-elf-linux/libiberty'
+make[1]: *** [../libiberty/libiberty.a] Error 2
+make[1]: Leaving directory `/tmp/hdl/build-gcc-2.95.3/arm-elf-linux/libstdc++'
+make: *** [all-target-libstdc++] Error 2
+
+		根據 http://groups.yahoo.com/group/crossgcc/message/2446：
+
+ It didn't succeed in producing the 'libiberty.a', because the linking
+didn't succeed in the
+test case. Building 'libiberty' needs a fully working toolset, not just
+a compiler. It must
+test the 'crt*.o', 'libc.a' etc. in order to find the missing functions.
+No undefined symbols
+in a normal compilation is the prerequisite...
+
+ As told in my 'preach' in another message, preinstalling a working glibc
+is the recommended way, and should be the most common method too. Building
+from scratch needs quite a lot know-how about how glibc and GCC work. If
+not being worked with them for years, only garbage may be produced, the old
+'GIGO' ('Garbage In - Garbage Out') rule should be known... When the GCC-
+build expects a working C-library (this meaning 'any' working...) and the
+glibc-build expects a working GCC with a working 'libgcc'-stuff, the build
+from scratch really requires the builder knowing what one is doing... So,
+"Don't try to build a car until you have heard someone talking about tires,
+a motor, gasoline etc. being necessary for it, otherwise it will not run"...
+
+ It can be that one doesn't know that 20 litres gasoline put into some big
+bottle inside the car isn't enough for the motor to find it (it should be
+put into the tank...). Quite the same thing is not knowing where GCC tries
+to find its headers, so putting them 'somewhere' may be the result...
+
+ Please try the following:
+
+    powerpc-linux-gcc --help
+and
+    powerpc-linux-gcc -print-search-dirs
+
+and please get the GCC-manual by building it from the '.texinfo' sources
+or downloading it from 'ftp.redhat.com/products/support/manuals' (in PDF)
+or somewhere...
+
+
+		修改/tmp/hdl/lib/libc.so，把GROUP後所有檔案的路徑部份全部刪除
+		make distclean
+		重新configure （參數未更動）
+		make ==> 錯誤訊息一樣
+
+		回到build-binutils把configure時出現的訊息列出來看，其中
+
+Configuring libiberty...
+loading cache ../config.cache
+checking host system type... i686-pc-linux-gnu
+checking build system type... i686-pc-linux-gnu
+
+	在設定libiberty時只有出現host system type及build system type;但是在configure其它目錄時都還會多出一個target system type。是不是在binutils就設錯了。
+
+----------------------------------------------------------------------------------------------------
+
+
+* 編TOOLCHAIN(全部檔案均從ftp.ntust.edu.tw/unix/GNU下載) （編譯成功，所有步驟均照Building Embedded Linux System Chapter 4-2 所述，遇到程式碼有問題部份則利用google尋找解決方法）
+
+	注意：請勿用root身份編譯toolchain，以免操作錯誤損及系統檔案。建議用一般使用者編譯及安裝；除非要安裝到/usr否則不需用root身份（不建議安裝到/usr）
+
+	注意：關於以下對glibc 2.3.2所有的修補，全部都整合到 glibc-2.3.2_total_patch_by_hdl.patch.gz 只要在解壓縮 glibc-2.3.2.tar.bz2 及 glibc-linuxthreads-2.3.2.tar.bz2 後進入解出來的目錄並執行 zcat /path/to/glibc-2.3.2_total_patch_by_hdl.patch.gz | patch -p1 即可。毋需再做額外的修補動作。
+
+	0. linux kernel source tree
+		tar xjvf linux-2.4.19.tar.bz2
+		cd linux-2.4.19
+		bzcat patch-2.4.19-rmk7.bz2 | patch -p1
+		zcat diff-2.4.19-rmk7-pxa2.gz | patch -p1
+		make lubbock_config oldconfig dep
+
+		其中 /tmp/hdl/arm-linux 等於 ${PREFIX}/${TARGET}
+		mkdir /tmp/hdl/arm-linux/include
+		cp -R include/linux /tmp/hdl/arm-linux/include/
+		cp -R include/asm-arm/ /tmp/hdl/arm-linux/include/asm/
+		cp -R include/asm-generic/ /tmp/hdl/arm-linux/include/
+		若不執行上述三個命令，以後cross compile gcc編出來後執行 echo 'main() {}' | arm-linux-gcc -E -v - 會出現ignoring nonexistent directory "/tmp/hdl/arm-linux/include"
+
+		可是若執行上述捰命令，因為kernel header有兩個（一份在arm-linux/include；另一份在kernel source tree的include目錄），造成編譯KERNEL時會有一大堆重覆定義的警告訊息出現。
+
+		export PRJROOT=/tmp/hdl
+		export PREFIX=${PRJROOT}/tools
+		export TARGET=arm-linux
+		export TARGET_PREFIX=${PREFIX}/${TARGET}
+
+	1. binutils (2.14)
+
+		cd build-binutils/
+		../binutils-2.14/configure --prefix=${PREFIX} --target=${TARGET} 2>&1 | tee configure.log
+		make 2>&1 | tee make.log
+		make install 2>&1 | tee make_intall.log
+		export PATH=${PREFIX}/bin:${PATH}
+
+	2. install glibc header (for gcc 3.2 and above)
+		tar xjvf glibc-2.3.2.tar.bz2
+		tar xjvf glibc-linuxthreads-2.3.2.tar.bz2 -C glibc-2.3.2
+		../glibc-2.3.2/configure --build=i686-pc-linux-gnu --host=$TARGET --prefix="/usr" --enable-add-ons --with-headers=${TARGET_PREFIX}/include 2>&1 | tee configure.log
+		make cross-compiling=yes install_root=${TARGET_PREFIX} prefix="" install-headers
+
+	3. bootstrap gcc (3.3)
+	
+		上 inhibit_libc patch 含 -D__gthr_posix_h （注意，gthr前是兩個底線）
+		mkdir -p ${TARGET_PREFIX}/include/gnu
+		touch ${TARGET_PREFIX}/include/gnu/stubs.h
+		../gcc-3.3/configure --target=${TARGET} --prefix=${PREFIX} --disable-shared --with-headers=${TARGET_PREFIX}/include --with-newlib --enable-languages=c 2>&1 | tee configure.log
+		make all-gcc 2>&1 | tee make_all-gcc.log (YES! 沒有出現ERROR)
+		make install-gcc 2>&1 | tee make_install-gcc.log
+
+		註：最後兩個步驟改用make all及make install好像也沒什麼問題，但是在2.95.3上似乎不行，還是乖乖用all-gcc及install-gcc
+
+	3. glibc
+		tar xjvf glibc-2.3.2.tar.bz2
+		tar xjvf glibc-linuxthreads-2.3.2.tar.bz2 -C glibc-2.3.2
+		cd build-glibc
+		CC=arm-linux-gcc ../glibc-2.3.2/configure --build=i686-pc-linux-gnu --host=$TARGET --prefix="/usr" --enable-add-ons --with-headers=${TARGET_PREFIX}/include 2>&1 | tee configure.log
+		make 2>&1 | tee make.log ==> 發生錯誤訊息
+
+		In file included from ../linuxthreads/sysdeps/pthread/sigaction.c:53,
+		                 from ../linuxthreads/sysdeps/pthread/sigaction.c:53,
+		                 from ../linuxthreads/sysdeps/pthread/sigaction.c:29:
+		../sysdeps/unix/sysv/linux/arm/sigaction.c: In function `__libc_sigaction':
+		../sysdeps/unix/sysv/linux/arm/sigaction.c:100: error: asm-specifier for variable `_a1' conflicts with asm clobber list
+		../sysdeps/unix/sysv/linux/arm/sigaction.c:139: error: asm-specifier for variable `_a1' conflicts with asm clobber list
+		make[2]: *** [/tmp/hdl/build-tools/build-glibc/signal/sigaction.o] Error 1
+		make[2]: Leaving directory `/tmp/hdl/build-tools/glibc-2.3.2/signal'
+		make[1]: *** [signal/subdir_lib] Error 2
+		make[1]: Leaving directory `/tmp/hdl/build-tools/glibc-2.3.2'
+		make: *** [all] Error 2
+		
+		在http://gcc.rgai.hu/glibc-mails/mail1.php 找到解決方法(用../sysdeps/unix/sysv/linux/arm/sigaction.c:100: error: asm-specifier for variable `_a1' conflicts with asm clobber list到google找)。這是glibc-2.3.2的BUG，請執行以下修補
+		
+		RCS file: /cvs/glibc/libc/sysdeps/unix/sysv/linux/arm/sysdep.h,v
+		retrieving revision 1.22
+		diff -u -r1.22 sysdep.h
+		--- sysdeps/unix/sysv/linux/arm/sysdep.h	23 Mar 2003 19:42:22 -0000	1.22
+		+++ sysdeps/unix/sysv/linux/arm/sysdep.h	24 Mar 2003 13:23:16 -0000
+		@@ -174,7 +174,7 @@
+		        asm volatile ("swi	%1	@ syscall " #name	\
+		 		     : "=r" (_a1)				\
+		 		     : "i" (SYS_ify(name)) ASM_ARGS_##nr	\
+		-		     : "a1", "memory");				\
+		+		     : "memory");				\
+		        _sys_result = _a1;					\
+		      }								\
+		      (int) _sys_result; })
+
+		手動修改glibc-2.3.2/sysdeps/unix/sysv/linux/arm/sysdep.h, 把第161列，即上述: "a1", "memory");改成: "memory");
+
+==================================================
+
+		回到build-glibc
+		make 2>&1 | tee -a make.log ==> 出現下列錯誤訊息
+
+		sscanf.c:31: warning: conflicting types for built-in function `sscanf'
+		sscanf.c: In function `sscanf':
+		sscanf.c:37: error: `va_start' used in function with fixed args
+		make[2]: *** [/tmp/hdl/build-tools/build-glibc/stdio-common/sscanf.o] Error 1
+		make[2]: Leaving directory `/tmp/hdl/build-tools/glibc-2.3.2/stdio-common'
+		make[1]: *** [stdio-common/subdir_lib] Error 2
+		make[1]: Leaving directory `/tmp/hdl/build-tools/glibc-2.3.2'
+		
+		在http://archive.linuxfromscratch.org/mail-archives/lfs-support/2003/06/0135.html找到解答(用sscanf.c:31: warning: conflicting types for built-in function `sscanf'當關鍵字到google找)，又是GLIBC2.3.2的BUG了，上以下PATCH
+		glibc-2.3.2-sscanf.patch
+		
+		--- stdio-common/sscanf.c.~1.8.~ 2003-01-16 11:25:20.000000000 +0100
+		+++ stdio-common/sscanf.c 2003-03-05 12:07:34.000000000 +0100
+		@@ -1,4 +1,4 @@
+		-/* Copyright (C) 1991,95,96,98,2002 Free Software Foundation, Inc.
+		+/* Copyright (C) 1991,95,96,98,2002, 2003 Free Software
+		Foundation, Inc.
+		     This file is part of the GNU C Library.
+		
+		     The GNU C Library is free software; you can redistribute it
+		and/or
+		@@ -27,9 +27,7 @@
+		  /* Read formatted input from S, according to the format string
+		FORMAT. */
+		  /* VARARGS2 */
+		  int
+		-sscanf (s, format)
+		- const char *s;
+		- const char *format;
+		+sscanf (const char *s, const char *format, ...)
+		  {
+		    va_list arg;
+		    int done; 
+		
+			 修改glibc-2.3.2/stdio-comm/sscanf.c,到第30列，把
+			 sscanf (s, format)
+			  const char *s;
+			  const char *format;
+			 改成
+			 sscanf (const char *s, const char *format, ...)
+
+==================================================
+		make 2>&1 | tee -a make.log ==> 出現下列錯誤訊息
+		
+		<stdin>: Assembler messages:
+		<stdin>:2: Error: garbage following instruction -- `ldr lr,[sp],#4 ldr ip,=__libc_multiple_threads'
+		make[2]: *** [/tmp/hdl/build-tools/build-glibc/posix/pause.op] Error 1
+		make[2]: Leaving directory `/tmp/hdl/build-tools/glibc-2.3.2/posix'
+		make[1]: *** [posix/subdir_lib] Error 2
+		make[1]: Leaving directory `/tmp/hdl/build-tools/glibc-2.3.2'
+		make: *** [all] Error 2
+		
+			在http://sources.redhat.com/ml/bug-glibc/2003-05/msg00076.html找到修補檔
+		
+		  PATCH 0: add semicolon
+		
+		diff -urN glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h glibc-2.3.2-sysdep_cancel/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
+		--- glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Sun Jan 12 11:13:57 2003
+		+++ glibc-2.3.2-sysdep_cancel/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Wed May 14 14:16:49 2003
+		@@ -34,7 +34,7 @@
+		 # define PSEUDO(name, syscall_name, args)				\
+		   .section ".text";							\
+		     PSEUDO_PROLOGUE;							\
+		-  ENTRY (name)								\
+		+  ENTRY (name);								\
+		     SINGLE_THREAD_P_INT;						\
+		     bne .Lpseudo_cancel;						\
+		     DO_CALL (syscall_name, args);					\
+		
+		修改 ../glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h 在第37列的ENTRY(NAME)後方加上分號
+		
+		  PATCH 1: Replace "lr" with "reg"
+		
+		diff -urN glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h glibc-2.3.2-sysdep-cancel-lr/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
+		--- glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Sun Jan 12 11:13:57 2003
+		+++ glibc-2.3.2-sysdep-cancel-lr/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Mon May 19 14:17:49 2003
+		@@ -110,7 +110,7 @@
+		   ldr reg, 2b;								\
+		 3:									\
+		   add ip, pc, ip;							\
+		-  ldr ip, [ip, lr];							\
+		+  ldr ip, [ip, reg];							\
+		   teq ip, #0;
+		 #   define SINGLE_THREAD_P_INT						\
+		   str lr, [sp, $-4]!;							\
+		
+		修改 ../glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h 將第113列 ldr ip, [ip, lr]; 換成 ldr ip, [ip, reg];
+		
+		  PATCH 2: Reworked doargs
+		
+		diff -urN glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h glibc-2.3.2-sysdep-cancel-doargs/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
+		--- glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Mon May 19 14:23:32 2003
+		+++ glibc-2.3.2-sysdep-cancel-doargs/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h	Mon May 19 14:24:55 2003
+		@@ -24,6 +24,15 @@
+		 
+		 #if !defined NOT_IN_libc || defined IS_IN_libpthread
+		 
+		+/* We push lr onto the stack, so we have to use ldmib instead of ldmia
+		+   to find the saved arguments.  */
+		+#undef DOARGS_5
+		+#undef DOARGS_6
+		+#undef DOARGS_7
+		+#define DOARGS_5 str r4, [sp, $-4]!; ldr r4, [sp, $8];
+		+#define DOARGS_6 mov ip, sp; stmfd sp!, {r4, r5}; ldmib ip, {r4, r5};
+		+#define DOARGS_7 mov ip, sp; stmfd sp!, {r4, r5, r6}; ldmib ip, {r4, r5, r6};
+		+
+		 # undef PSEUDO_RET
+		 # define PSEUDO_RET						        \
+		     ldrcc pc, [sp], $4;	
+		
+		修改 ../glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
+		這個比較不一樣（因為是參考CVS上的，不是照上面的PATCH），在第25列#if !defined NOT_IN_libc || defined IS_IN_libpthread下方加上以下數列：
+		/* We push lr onto the stack, so we have to use ldmib instead of ldmia
+		   to find the saved arguments.  */
+		# ifdef PIC
+		#  undef DOARGS_5
+		#  undef DOARGS_6
+		#  undef DOARGS_7
+		#  define DOARGS_5 str r4, [sp, $-4]!; ldr r4, [sp, $8];
+		#  define DOARGS_6 mov ip, sp; stmfd sp!, {r4, r5}; ldmib ip, {r4, r5};
+		#  define DOARGS_7 mov ip, sp; stmfd sp!, {r4, r5, r6}; ldmib ip, {r4, r5, r6};
+		# endif
+
+==================================================
+
+		make 2>&1 | tee -a make.log ==> 總算沒有出現ERROR了，不過有不少WARNING，希望這個LIBRARY真的能用
+		make install_root=${TARGET_PREFIX} prefix="" install 2>&1 | tee make_install.log
+
+		cd ${TARGET_PREFIX}/lib
+		cp libc.so libc.so.orig
+		vi libc.so.orig
+		修改編出來的library的link script，把檔案名前面的路徑全部去掉
+		發現libc.so多了一列不該有的訊息 *** BUG in libc/scripts/output-format.sed *** elf32-bigarm,elf32-littlearm
+		去 http://sources.redhat.com/cgi-bin/cvsweb.cgi/libc/scripts/output-format.sed.diff?r1=1.1&r2=1.2&cvsroot=glibc&f=h 查過，output-format.sed 已經是最新版了，不瞭解為何要出現BUG訊息，暫時把該列拿掉好了。
+
+		註：節錄glibc-2.3.2原始碼內INSTALL中一段話
+
+		`--build=BUILD-SYSTEM'
+		`--host=HOST-SYSTEM'
+		     These options are for cross-compiling.  If you specify both
+		     options and BUILD-SYSTEM is different from HOST-SYSTEM, `configure'
+		     will prepare to cross-compile glibc from BUILD-SYSTEM to be used
+		     on HOST-SYSTEM.  You'll probably need the `--with-headers' option
+		     too, and you may have to override CONFIGURE's selection of the
+		     compiler and/or binutils.
+
+	4. gcc
+		../gcc-3.3/configure --target=${TARGET} --prefix=${PREFIX} --enable-languages=c,c++ 2>&1 | tee configure.log
+		make all 2>&1 | tee make_all.log
+		make install 2>&1 | tee make_install.log
+
+		額外嘗試編譯C，C++以外語言
+		../gcc-3.3/configure --target=${TARGET} --prefix=${PREFIX} 2>&1 | tee configure.log
+		make all 2>&1 | tee -a make_all.log ==> 出現下列錯誤訊息
+
+		/tmp/hdl/arm-linux/bin/ld:/tmp/hdl/arm-linux/lib/libpthread.so: file format not recognized; treating as linker script
+		/tmp/hdl/arm-linux/bin/ld:/tmp/hdl/arm-linux/lib/libpthread.so:4: parse error
+		collect2: ld returned 1 exit status
+		make[2]: *** [libgcjgc.la] Error 1
+		make[2]: Leaving directory `/tmp/hdl/build-tools/build-gcc/arm-linux/boehm-gc'
+		make[1]: *** [all-recursive] Error 1
+		make[1]: Leaving directory `/tmp/hdl/build-tools/build-gcc/arm-linux/boehm-gc'
+		make: *** [all-target-boehm-gc] Error 2
+
+		經過檢查後，${TARGET_PREFIX}/lib/libpthread.so 和 ${TARGET_PREFIX}/lib/libc.so 一樣都出現了BUG字眼，因此對它也做了相同的修改：
+			(1) 刪除含BUG文字那一列
+			(2) 將 GROUP 後方檔案的路徑刪除
+
+		make all 2>&1 | tee -a make_all.log ==> 沒問題
+
+	5. gdb (5.3)
+		tar xzvf gdb-5.3.tar.gz
+		../gdb-5.3/configure --prefix=${PREFIX} --target=${TARGET} 2>&1 | tee configure.log
+		make all 2>&1 | tee make_all.log
+		make install 2>&1 | tee make_intall.log
+
+
+	使用編好的toolchain前注意事項
+
+	1. 把當初configure時--prefix指定的路徑下的bin加入PATH變數
+	2. 若需要man pages則將--prefix指定路徑下man加入MANPATH變數
+	3. 若要讀編出來的info則可以：
+		1. 使用 info 時加上-d參數，後方空一格加上--prefix指定路徑下info目錄，讓info可以搜尋到。
+		2. 直接 info -f 檔案名
+
+	編譯後檢查：
+		在build-glibc執行make check出現以下錯誤訊息：
+
+		../include/locale.h:20: warning: `visibility' attribute directive ignored
+		In file included from ../include/ctype.h:14,
+		                 from gconv_charset.h:21,
+		                 from gconv_db.c:30:
+		../locale/localeinfo.h:172: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:173: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:176: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:177: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:180: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:185: warning: `visibility' attribute directive ignored
+		In file included from ../include/ctype.h:14,
+		                 from gconv_charset.h:21,
+		                 from gconv_db.c:30:
+		../locale/localeinfo.h:281: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:292: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:296: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:300: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:304: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:313: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:316: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:326: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:332: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:337: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:342: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:347: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:352: warning: `visibility' attribute directive ignored
+		../locale/localeinfo.h:359: warning: `visibility' attribute directive ignored
+		gconv_db.c: In function `find_derivation':
+		gconv_db.c:383: `__INT_MAX__' undeclared (first use in this function)
+		gconv_db.c:383: (Each undeclared identifier is reported only once
+		gconv_db.c:383: for each function it appears in.)
+		make[2]: *** [/tmp/hdl/build-tools/build-glibc/iconv/gconv_db.os] Error 1
+		make[2]: Leaving directory `/tmp/hdl/build-tools/glibc-2.3.2/iconv'
+		make[1]: *** [iconv/tests] Error 2
+		make[1]: Leaving directory `/tmp/hdl/build-tools/glibc-2.3.2'
+		make: *** [check] Error 2
+
+		這樣子的glibc還能不能用？
+
+==================================================
+
+		在 build-gcc 內執行make check，出現下列錯誤訊息：
+
+		WARNING: Couldn't find the global config file.
+		WARNING: Couldn't find tool init file
+		Test Run By hdl on Sun Jul 27 10:24:28 2003
+		Target is arm-unknown-linux-gnu
+		Host   is arm-unknown-linux-gnu
+		Build  is i686-pc-linux-gnu
+
+		                === libstdc++-v3 tests ===
+
+		Schedule of variations:
+		    unix
+
+		Running target unix
+		Using /usr/share/dejagnu/baseboards/unix.exp as board description file for target.
+		Using /usr/share/dejagnu/config/unix.exp as generic interface file for target.
+		Using /tmp/hdl/build-tools/gcc-3.3/libstdc++-v3/testsuite/config/default.exp as tool-and-target-specific interface file.
+		WARNING: Assuming target board is the local machine (which is probably wrong).
+		You may need to set your DEJAGNU environment variable.
+		Running /tmp/hdl/build-tools/gcc-3.3/libstdc++-v3/testsuite/libstdc++-v3.dg/dg.exp ...
+
+		以下全部都是如下格式的錯誤訊息
+	
+		FAIL: 25_algorithms/binary_search.cc execution test
+		...
+
+		                === libstdc++-v3 Summary ===
+		
+		# of expected passes            258
+		# of unexpected failures        195
+		# of expected failures          28
+		make[4]: *** [check-DEJAGNU] Error 1
+		make[4]: Leaving directory `/tmp/hdl/build-tools/build-gcc/arm-linux/libstdc++-v3/testsuite'
+		make[3]: *** [check-am] Error 2
+		make[3]: Leaving directory `/tmp/hdl/build-tools/build-gcc/arm-linux/libstdc++-v3/testsuite'
+		make[2]: *** [check-recursive] Error 1
+		make[2]: Leaving directory `/tmp/hdl/build-tools/build-gcc/arm-linux/libstdc++-v3'
+		make[1]: *** [check-target-libstdc++-v3] Error 2
+		make[1]: Leaving directory `/tmp/hdl/build-tools/build-gcc'
+		make: *** [check] Error 2
+
+
+
+	gcc的測試訊息應該是不能拿來參考的，看到 WARNING: Assuming target board is the local machine (which is probably wrong). 了嗎？也就是說這次的測試因為沒有設定target board；變成以PC為測試對象。但是...又不知道要如何做這方面的測試 :( 不知道 http://kegel.com/crosstool/crosstool-0.14/doc/dejagnu-remote-howto.html 講的有沒有幫助？
+
+
+==================================================
+
+
+	結論：
+		以下是此次編譯toolchain時組態及編譯時重要的命令（已去掉為了檢查錯誤所加上的參數）
+
+	0. kernel header files
+		mkdir -p ${PREFIX}/${TARGET}/include
+		cp -R include/linux ${PREFIX}/${TARGET}/include/
+		cp -R include/asm-arm/ ${PREFIX}/${TARGET}/include/
+		ln -s ${PREFIX}/${TARGET}/include/asm-arm ${PREFIX}/${TARGET}/include/asm
+		cp -R include/asm-generic/ ${PREFIX}/${TARGET}/include/
+
+	1. binutils (2.14)
+		../binutils-2.14/configure --prefix=${PREFIX} --target=${TARGET} 
+		make ; make install 
+		export PATH=${PREFIX}/bin:${PATH}
+
+	2. bootstrap gcc (3.3)
+		上 inhibit_libc patch 含 -D__gthr_posix_h （注意，gthr前是兩個底線）
+		../gcc-3.3/configure --target=${TARGET} --prefix=${PREFIX} --disable-threads --disable-shared --with-headers=${TARGET_PREFIX}/include --with-newlib --enable-languages=c 
+		make all-gcc install-gcc
+
+		註: 若是未加上 --disable-threads 會出現的錯誤訊息是關於 posix*.h. 看起來會有點像是沒有加上 inhibit libc patch
+
+	3. install glibc header (for gcc 3.2 and above)
+		tar xjvf glibc-2.3.2.tar.bz2
+		tar xjvf glibc-linuxthreads-2.3.2.tar.bz2 -C glibc-2.3.2
+		../glibc-2.3.2/configure --build=i686-pc-linux-gnu --host=$TARGET --prefix="/usr" --enable-add-ons --with-headers=${TARGET_PREFIX}/include 
+		make cross-compiling=yes install_root=${TARGET_PREFIX} prefix="" install-headers
+		mkdir -p ${TARGET_PREFIX}/include/gnu
+		touch ${TARGET_PREFIX}/include/gnu/stubs.h
+
+	註: 在 Building Embedded Linux System Chapter 4-2 中說要先裝好 glibc header 才開始編 bootstrap gcc 然後才是 glibc. 但是, 我實際操作時若未先編出 bootstrap gcc 則安裝 glibc header 時(執行 configure)會抱怨找不到 arm-linux-gcc 
+
+	註: 在上述該書是因為在編譯 bootstrap gcc 時採用 --without-headers 參數, 在 gcc3.2 以後的版本已經不能用該參數, 因此才寫要先安裝 glibc header. 可能到了最近的 glibc 版本要求 configure 時一定要有 arm-linux-gcc
+
+	4. glibc
+		tar xjvf glibc-2.3.2.tar.bz2
+		tar xjvf glibc-linuxthreads-2.3.2.tar.bz2 -C glibc-2.3.2
+		若有修補檔請在此時補上
+		CC=arm-linux-gcc AR=arm-linux-ar RANLIB=arm-linux-ranlib ../glibc-2.3.2/configure --build=i686-pc-linux-gnu --host=$TARGET --prefix="/usr" --enable-add-ons --with-headers=${TARGET_PREFIX}/include 
+		make 
+		make install_root=${TARGET_PREFIX} prefix="" install 2>&1 | tee make_install.log
+		修改 ${TARGET_PREFIX}/lib/libc.so及libpthread.so把有BUG文字那一列刪除；把GROUP後方指定檔案的路徑刪除，只保留檔名. 此一步驟若未執行則編譯完整的 gcc 時會出現 arm-linux-gcc 不 work 訊息.
+
+	5. gcc
+		去除-Dinhibit_libc patch
+		CC=gcc ../gcc-3.3/configure --target=${TARGET} --prefix=${PREFIX} --host=i686-pc-linux-gnu --with-headers=${TARGET_PREFIX}/include --enable-threads=pthreads --enable-shared --enable-static
+		make all install
+
+		註: 若未加上 export CC=gcc ,即使 unset CC ,還是會編出 arm 版本的 gengenrtl, 造成編譯時無法執行gengenrtl發生錯誤
+
+	6. gdb (5.3)
+		../gdb-5.3/configure --prefix=${PREFIX} --target=${TARGET} 
+		make all install
+
+	7. gdbserver
+		mkdir build-gcc-gdbserver
+		../gdb-5.3/gdb/gdbserver configure --prefix=${PREFIX} --target=${TARGET}
+		make CC=arm-linux-gcc all install
+
+		註: configure 似乎無法設定好要用的 gcc (即使有指定 --host 及 --build), 而且發現一種情況, CC=arm-linux-gcc make all 和 make CC=arm-linux-gcc all 是不同的, 前者未必會用命令列指定的 CC; 後者就會了.
+
+----------------------------------------------------------------------------------------------------
+
+* 使用 toolchain 時注意事項
+
+	不管是用別人還是自己的 toolchain, 只要是核心版本或檔案有不同, 建議使用之前將 toolchain 的 arm-elf/include (或arm-linux/include之類)下的 asm, linux 這兩個連結改連結到當時使用中的核心原始碼. 會少很多問題.
+
+----------------------------------------------------------------------------------------------------
+
+* 2004/01/03 為協志重編 toolchain 過程
+
+ export TARGET=arm-linux
+ export PREFIX=/pub/project/armlinux/dbpxa250/tools
+ export TARGET_PREFIX=${PREFIX}/${TARGET}
+ 2176  unset CC
+ 2177  unset LD_LIBRARY_PATH
+
+ 設定 kernel header
+ cd ${PREFIX}
+ 2183  mkdir -p $TARGET/linux
+ 2189  cd ../linux-2.4.19-rmk7-pxa2/include 
+ 2193  cp -aR linux/ ${PREFIX}/${TARGET}/include/
+ 2195  cp -aR asm ${PREFIX}/${TARGET}/include/
+ 2198  cp -aR asm-arm ${PREFIX}/${TARGET}/include/
+ 2196  cp -aR asm-generic/ ${PREFIX}/${TARGET}/include/
+ 2202  cd ../../build-tools/
+ 
+ 編譯 binutils
+ 2205  tar xjvf binutils-2.14.tar.bz2 
+ 2206  cd build-binutils/
+ 2207  ../binutils-2.14/configure --prefix=${PREFIX} --target=${TARGET}
+ 2208  make all install 2>&1 | tee make.log
+ 2209  export PATH=${PREFIX}/bin/:$PATH
+ 2210  cd ..
+
+ 編譯 bootstrap gcc
+ 2212  tar xjvf gcc-3.3.2.tar.bz2 
+ 2213  cd build-gcc-bootstrap/
+
+ 上 inhibit libc patch
+ 2214  vi ../gcc-3.3.2/gcc/config/arm/t-linux
+ 註：所謂的上inhibit libc patch是指修改 gcc-X.X/gcc/config/arm/t-linux
+    在 TARGET_LIBGCC2_CFLAGS 那一列後方加上 -Dinhibit_libc -D__gthr_posix_h
+    並新增 T_CFLAGS = -Dinhibit_libc -D__gthr_posix_h
+   
+    到了編譯完整gcc時要把這個檔案回復原狀
+
+ 上兩個修改檔 http://www.zipworld.com.au/%7Egschafer/patches/gcc-3.2.fix-copy.patch.gz, http://www.zipworld.com.au/%7Egschafer/patches/gcc-3.2.fix-var.patch.gz 可能是因為這兩個patch是給gcc3.2用的，所以，兩個在修補gcc/calls.c時都會出現calls.rej。其中，fix-copy要手動修改；fix-var則不用（gcc-3.3.2已經改過了）
+
+ 註：依據 http://www.zipworld.com.au/~gschafer/lfs-tweaks.html 所述，可以解決一些miscompile問題 
+
+ 2215  ../gcc-3.3.2/configure --target=${TARGET} --prefix=${PREFIX} --host=i686-pc-linux-gnu --disable-threads --disable-shared --with-headers=${TARGET_PREFIX}/include --with-newlib --enable-languages=c
+
+ 註：依據 http://www.zipworld.com.au/~gschafer/lfs-tweaks.html 所述，在 configure 後, make 前執行 echo "#define HAVE_GAS_HIDDEN 1" >> gcc/auto-host.h && 。因為gcc configure script 無法正確得知assembler有.hiddent屬性，導致編出有問題的gcc，然後又拿有問題的gcc去編glibc。
+
+ 2216  make all-gcc install-gcc 2>&1 | tee make.log
+ 2218  cd ..
+ 
+ 編譯 glibc
+ 2220  tar xjvf glibc-2.3.2.tar.bz2 
+ 2221  tar xjvf glibc-linuxthreads-2.3.2.tar.bz2 -C glibc-2.3.2
+ 2222  cd build-glibc
+ 修補錯誤
+
+
+==================================================
+ 此修補檔取自handhelds的自動編譯script
+
+--- ./sysdeps/unix/sysv/linux/arm/sysdep.h.orig 2003-02-20 12:22:10.000000000 -0800
++++ ./sysdeps/unix/sysv/linux/arm/sysdep.h      2003-08-04 19:06:17.000000000 -0700
+@@ -158,7 +158,7 @@
+        asm volatile ("swi      %1      @ syscall " #name       \\
+                     : "=r" (_a1)                               \\
+                     : "i" (SYS_ify(name)) ASM_ARGS_##nr        \\
+-                    : "a1", "memory");                         \\
++                    : "memory");                               \\
+        _sys_result = _a1;                                      \\
+      }                                                         \\
+      (int) _sys_result; })
+--- ./stdio-common/sscanf.c.orig        2003-08-04 19:27:34.000000000 -0700
++++ ./stdio-common/sscanf.c     2003-08-04 19:27:59.000000000 -0700
+@@ -27,9 +27,7 @@
+ /* Read formatted input from S, according to the format string FORMAT.  */
+ /* VARARGS2 */
+ int
+-sscanf (s, format)
+-     const char *s;
+-     const char *format;
++sscanf (const char *s, const char *format, ...)
+ {
+   va_list arg;
+   int done;
+
+diff -Naur glibc-2.3.2/libio/swprintf.c glibc-2.3.2-new/libio/swprintf.c
+--- glibc-2.3.2/libio/swprintf.c	2001-07-07 19:21:03.000000000 +0000
++++ glibc-2.3.2-new/libio/swprintf.c	2003-08-15 19:36:42.000000000 +0000
+@@ -1,4 +1,5 @@
+-/* Copyright (C) 1991,1995,1997,1998,1999,2000 Free Software Foundation, Inc.
++/* Copyright (C) 1991,1995,1997,1998,1999,2000,2003
++	Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+ 
+    The GNU C Library is free software; you can redistribute it and/or
+@@ -22,10 +23,7 @@
+ /* Write formatted output into S, according to the format string FORMAT.  */
+ /* VARARGS3 */
+ int
+-swprintf (s, n, format)
+-     wchar_t *s;
+-     size_t n;
+-     const wchar_t *format;
++swprintf (wchar_t *s, size_t n, const wchar_t *format, ...)
+ {
+   va_list arg;
+   int done;
+
+
+diff -Naur glibc-2.3.2/libio/swscanf.c glibc-2.3.2-new/libio/swscanf.c
+--- glibc-2.3.2/libio/swscanf.c	2001-07-07 19:21:03.000000000 +0000
++++ glibc-2.3.2-new/libio/swscanf.c	2003-08-15 19:36:42.000000000 +0000
+@@ -1,4 +1,4 @@
+-/* Copyright (C) 1991, 1995, 1996, 1998, 1999 Free Software Foundation, Inc.
++/* Copyright (C) 1991,1995,1996,1998,1999,2003 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+ 
+    The GNU C Library is free software; you can redistribute it and/or
+@@ -22,9 +22,7 @@
+ /* Read formatted input from S, according to the format string FORMAT.  */
+ /* VARARGS2 */
+ int
+-swscanf (s, format)
+-     const wchar_t *s;
+-     const wchar_t *format;
++swscanf (const wchar_t *s, const wchar_t *format, ...)
+ {
+   va_list arg;
+   int done;
+
+==================================================
+
+ 2223  vi ../glibc-2.3.2/sysdeps/unix/sysv/linux/arm/sysdep.h
+ 2224  vi ../glibc-2.3.2/stdio-common/sscanf.c .../swprintf.c .../sscanf.c 等等
+
+ 註：編出來的 glibc2.3.2 常常出現Segmentation Fault。利用本文件提到的抓取Segmentation Fault技巧，發現是在libc_connect+10h的地方當掉。在 http://mail.gnu.org/archive/html/bug-glibc/2003-05/msg00075.html 找到下列修補檔可以解決此問題
+
+==================================================
+
+On Fri, May 16, 2003 at 12:19:02AM -0400, Daniel Jacobowitz wrote:
+> On Thu, May 15, 2003 at 08:46:10PM +0300, Nick Patavalis wrote:
+> >
+> > Finaly, and thanks to your patches, I got glibc 2.3.2 to cross-compile
+> > (targeting arm-linux), and I installed it on a target SA1110-based
+> > system. Test binaries I have created seem to run. That is, until they
+> > issue the "connect" system call, at which point everything
+> > segfaults. The following test program, for example, crashes reliably:
+> 
+> Yes.  I recommend reading the archives of this list; you'll find
+> another patch I posted to fix this problem.  It was about a month ago
+> now.
+> 
+
+I managed to cross-build, what appears to be, a working glibc-2.3.2
+targeting arm-linux. Here are---all in all---the patches I applied,
+starting from the distributed 2.3.2 sources:
+
+  PATCH 0: Semicolon at the end of "ENTRY"
+
+diff -urN glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h 
+glibc-2.3.2-sysdep_cancel/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
+--- glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h        
+Sun Jan 12 11:13:57 2003
++++ 
++glibc-2.3.2-sysdep_cancel/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
++  Wed May 14 14:16:49 2003
+@@ -34,7 +34,7 @@
+ # define PSEUDO(name, syscall_name, args)                              \
+   .section ".text";                                                    \
+     PSEUDO_PROLOGUE;                                                   \
+-  ENTRY (name)                                                         \
++  ENTRY (name);                                                                
++\
+     SINGLE_THREAD_P_INT;                                               \
+     bne .Lpseudo_cancel;                                               \
+     DO_CALL (syscall_name, args);                                      \
+
+  PATCH 1: Replace "lr" with "reg"
+
+diff -urN glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h 
+glibc-2.3.2-sysdep-cancel-lr/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
+--- glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h        
+Sun Jan 12 11:13:57 2003
++++ 
++glibc-2.3.2-sysdep-cancel-lr/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
++       Mon May 19 14:17:49 2003
+@@ -110,7 +110,7 @@
+   ldr reg, 2b;                                                         \
+ 3:                                                                     \
+   add ip, pc, ip;                                                      \
+-  ldr ip, [ip, lr];                                                    \
++  ldr ip, [ip, reg];                                                   \
+   teq ip, #0;
+ #   define SINGLE_THREAD_P_INT                                         \
+   str lr, [sp, $-4]!;                                                  \
+
+  PATCH 2: Reworked doargs
+
+diff -urN glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h 
+glibc-2.3.2-sysdep-cancel-doargs/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
+--- glibc-2.3.2/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h        
+Mon May 19 14:23:32 2003
++++ 
++glibc-2.3.2-sysdep-cancel-doargs/linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h
++   Mon May 19 14:24:55 2003
+@@ -24,6 +24,15 @@
+ 
+ #if !defined NOT_IN_libc || defined IS_IN_libpthread
+ 
++/* We push lr onto the stack, so we have to use ldmib instead of ldmia
++   to find the saved arguments.  */
++#undef DOARGS_5
++#undef DOARGS_6
++#undef DOARGS_7
++#define DOARGS_5 str r4, [sp, $-4]!; ldr r4, [sp, $8];
++#define DOARGS_6 mov ip, sp; stmfd sp!, {r4, r5}; ldmib ip, {r4, r5};
++#define DOARGS_7 mov ip, sp; stmfd sp!, {r4, r5, r6}; ldmib ip, {r4, r5, r6};
++
+ # undef PSEUDO_RET
+ # define PSEUDO_RET                                                    \
+     ldrcc pc, [sp], $4;             
+
+==================================================
+
+ cd build-glibc
+ 2227  CC=arm-linux-gcc AR=arm-linux-ar RANLIB=arm-linux-ranlib ../glibc-2.3.2/configure --build=i686-pc-linux-gnu --host=$TARGET  --build=i686-pc-linux-gnu --prefix="/usr" --enable-add-ons --with-headers=${TARGET_PREFIX}/include
+ 2228  make 2>&1 | tee make.log
+ 2244  make install_root=${TARGET_PREFIX} prefix="" install 2>&1 | tee make_install.log
+
+ cd ${TARGET_PREFIX}/lib
+ cp libc.so libc.so.orig
+ vi libc.so.orig
+ cp libpthread.so libpthread.so.orig
+ vi libpthread.so
+ 修改編出來的library的link script，把檔案名前面的路徑全部去掉, 並刪除有BUG字眼那一列
+ 
+ 編譯完整的 gcc (c, c++)
+ export CC=gcc
+ 2278  export CC=gcc
+ 2279  ../gcc-3.3.2/configure --target=${TARGET} --prefix=${PREFIX} --host=i686-pc-linux-gnu --enable-languages="c,c++" --with-headers=/pub/project/armlinux/dbpxa250/tools/arm-linux/include/ --enable-threads=pthreads --enable-shared --enable-static --without-fp --with-cpu=xscale --enable-__cxa_atexit
+ 2280  make all 2>&1 | tee make_all.log
+ 2292  make install 2>&1 | tee make_install.log
+
+ 註：依據 http://gcc.gnu.org/gcc-3.2/c++-abi.html 及 http://www.zipworld.com.au/~gschafer/lfs-tweaks.html 所述，在configure時最好加上 --enable-__cxa_atexit 確保 ABI 的相容性
+
+ 註：因為PXA2XX沒有hardware float point unit 所以要加上 --without-fp
+
+
+ 編譯 gdb, 可要可不要
+ 2335  tar xjvf gdb-6.0.tar.bz2 
+ 2336  history > /tmp/1
+ 2337  mkdir build-gdb
+ 2338  cd build-gdb/
+ 2339  ../gdb-6.0/configure --prefix=$PREFIX --target=$TARGET
+ 2340  ls ../gdb-6.0/gdb/gdbserver/
+ 2341  make all 2>&1 | tee make_all.log
+ 2342  make install 2>&1 | tee make_install.log
+ cd ..
+
+ 編譯 gdbserver (因為目前gdb的configure還沒弄好,若要cross-compile gdb無法正確從Makefile取得CC, 因此要手動另外configure並編譯. 從 gdbserver 目錄的 README 看來的)
+ mkdir build-gdb-server
+ cd !:1
+ chmod +x ../gdb-6.0/gdb/gdbserver/configure
+ ../gdb-6.0/gdb/gdbserver/configure --prefix=$PREFIX --target=$TARGET
+ vi ../gdb-6.0/gdb/gdbserver/config.h 將 #define HAVE_SYS_REG_H 1 註解掉
+ make CC=arm-linux-gcc all install 2>&1 | tee make.log 若未加上CC=arm-linux-gcc會編出PC版的gdbserver
+
+----------------------------------------------------------------------------------------------------
+
+* 抓取發生 Segmentation Fault 時的訊息(含暫存器)
+
+	cp /path/to/libSegFault.so /rootfs/lib
+
+	LD_PRELOAD=/path/to/libSegFault.so SEGFAULT_OUTPUT_NAME=/path/to/cardmgr.segv /path/to/the/cardmgr
+
+	註: SEGFAULT_OUTPUT_NAME後方就是產生出來的報表檔, 一定要加路徑
+
+----------------------------------------------------------------------------------------------------
+
+* 2004/01/11 因為替協志編的toolchain一直發生 Segmentation Fault，在找到修補檔後重編，以下是命令記錄
+
+*前置工作及設定KERNEL HEADER
+ 2003  export TARGET=arm-linux
+ 2004  export PREFIX=/pub/project/armlinux/dbpxa250/tools
+ 2005  export TARGET_PREFIX=$PREFIX/$TARGET
+ 2006  unset CC
+ 2007  unset LD_LIBRARY_PATH
+ 2009  mkdir -p $TARGET_PREFIX/include 
+       cp -aR ../linux-2.4.19-rmk7-pxa2/include/{asm,linux,asm-arm} $TARGET_PREFIX/include
+
+*binutils
+ 2011  tar xjvf binutils-2.14.tar.bz2 
+ 2012  cd build-binutils/
+ 2013  ../binutils-2.14/configure --prefix=${PREFIX} --target=${TARGET}
+ 2014  make all install 2>&1 | tee make.log
+ 2015  export PATH=${PREFIX}/bin:$PATH
+ 2016  cd ..
+
+*bootstrap gcc
+ 2017  tar xjvf gcc-3.3.2.tar.bz2 
+ 2018  cd gcc-3.3.2
+ 2019  ls ..
+ 2020  zcat ../gcc-3.2.fix-copy.patch.gz | patch -p1
+ 2023  vi gcc/calls.c* 因為修補檔是為了gcc-3.2設計，參考*.rej手動修改未能成功修補部份
+
+ 2024  zcat ../gcc-3.2.fix-var.patch.gz | patch -p1
+ 2025  vi gcc/calls.* 雖然gcc/calls.c會再度出現無法修補訊息，但是經過比對，gcc-3.3.2已經做過該項修補，不用再補了
+
+ 上 inhibit libc patch
+ 2026  vi gcc/config/arm/t-linux
+
+ 2027  cd ../build-gcc-bootstrap/
+ 2030  ../gcc-3.3.2/configure --target=${TARGET} --prefix=${PREFIX} --host=i686-pc-linux-gnu --disable-threads --disable-shared --with-headers=${TARGET_PREFIX}/include --with-newlib --enable-languages=c --without-fp --with-cpu=xscale
+ 2032  echo "#define HAVE_GAS_HIDDEN 1" >> gcc/auto-host.h 
+ 2033  make all-gcc install-gcc 2>&1 | tee make.log
+ 2034  cd ..
+
+*glibc
+ 2035  tar xjvf glibc-2.3.2.tar.bz2 
+ 2036  tar xjvf glibc-linuxthreads-2.3.2.tar.bz2 -C glibc-2.3.2
+ 2037  cd glibc-2.3.2
+
+ 開始大量修補
+ 2038  vi sysdeps/unix/sysv/linux/sysdep.h
+ 2039  vi sysdeps/unix/sysv/linux/arm/sysdep.h
+ 2040  vi stdio-common/sscanf.c 
+ 2041  vi libio/swprintf.c 
+ 2042  vi libio/swscanf.c 
+ 2043  vi linuxthreads/sysdeps/unix/sysv/linux/arm/sysdep-cancel.h 
+ 2045  cd ../build-glibc
+ 2051   CC=arm-linux-gcc AR=arm-linux-ar RANLIB=arm-linux-ranlib ../glibc-2.3.2/configure --build=i686-pc-linux-gnu --host=$TARGET  --build=i686-pc-linux-gnu --prefix="/usr" --enable-add-ons --with-headers=${TARGET_PREFIX}/include
+ 2052  make 2>&1 | tee make.log
+ 2079  make install_root=$TARGET_PREFIX prefix="" install 2>&1 | tee make_install.log
+ 2081  cd ${TARGET_PREFIX}/lib
+ 2082  ls
+ 2083  vi libc.so libpthread.so
+       cd -
+       cd ..
+
+移除inhibit libc patch
+       vi gcc-3.3.2/gcc/config/arm/t-linux
+ 2085  export CC=gcc
+ 2086  cd build-gcc
+ 2090  ../gcc-3.3.2/configure --target=${TARGET} --prefix=${PREFIX} --host=i686-pc-linux-gnu --enable-languages="c,c++" --with-headers=/pub/project/armlinux/dbpxa250/tools/arm-linux/include/ --enable-threads=pthreads --enable-shared --enable-static --without-fp --with-cpu=xscale --enable-__cxa_atexit
+ 2091  make all 2>&1 | tee make_all.log
+ 2092  make install 2>&1 | tee make_install.log
+
+*gdb
+ 2096  tar xjvf gdb-6.0.tar.bz2 
+ 2097  cd build-gdb/
+ 2098  ../gdb-6.0/configure --prefix=$PREFIX --target=$TARGET
+ 2099  make all install 2>&1 | tee make.log
+ 2100  cd ..
+
+*gdbserver
+       cd gdb-6.0/gdb/gdbserver
+ 2103  chmod +x configure
+ 2104  ../configure --prefix=$PREFIX --target=$TARGET
+       vi config.h 把 #define HAVE_SYS_REG_H 1 註解掉
+ 2105  make CC=arm-linux-gcc all install 2>&1 | tee make.log
+
+----------------------------------------------------------------------------------------------------

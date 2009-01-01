@@ -1,0 +1,105 @@
+vim:ts=4:tw=0:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 架設 Yum Repository
+
+	假設要做 Fedora Core 1 內附套件的 Yum Repository
+	
+	1. 建立 /pub/linux/Fedora/Core_1/i386
+	2. 在該目錄用 symbolic 連到光碟的 Fedora/RPMS/*rpm (也可以將rpm檔放到該目錄)
+	3. 假設我們還要 firefly 的套件, 將firefly的套件放到 /pub/linux/Fedora/Core_1/firefly
+	4. 在 /pub/linux/Fedora/Core_1/ 執行
+		for f in i386 firefly
+		do
+			yum-arch -s -v -l $f
+		done
+	5. 在 /etc/yum.conf 分別將 /pub/linux/Fedora/Core_1/i386 及 /pub/linux/Fedora/Core_1/firefly 加到 baseurl 即可.
+
+	註: 當上述兩個目錄內rpm檔有更動時要執行 yum-arch 更新
+
+	註: 設定 proxy 方法: export http_proxy=http://proxy.ntust.edu.tw:3128
+
+----------------------------------------------------------------------------------------------------
+
+* YUM 的資料庫和 RPM 相同麼？
+
+	感覺上 YUM 應該是 RPM 的前端程式，負責把因為相依性而需要補齊的RPM檔都補齊後再呼叫RPM安裝。但是，不知道為什麼，用奕M安裝牰m、rpm-build、rpm-python後rpm及rpm-python這兩個套件居然會在系統出現兩份，一份是RH9的另一份則是FC1的。
+
+----------------------------------------------------------------------------------------------------
+
+* xcin 沒有倉頡輸入法
+
+	將 /etc/sysconfig/i18n 的 XMODIFIER="@im=xcin-zh_TW" 改成 XMODIFIER="@im=xcin-zh_TW.Big5"
+
+	更正: 這該沒有倉頡輸入法的原因是因為改用第五代倉頡的 cj.tab, 但是該檔案不知為何無法讀取導致此問題發生.
+
+----------------------------------------------------------------------------------------------------
+
+* xcin 出不來
+
+	不知道為什麼, 在 /etc/sysconif/i18n 設定 XMODIFIER 會讓 xcin 只能在像 rxvt 之類能用到小視窗(OverTheSpot)的程式輸入. 像 gnome-terminal 或 gaim 都不行. 最後只好將該列拿掉.
+
+----------------------------------------------------------------------------------------------------
+
+* xcin OnTheSpot
+
+	xcin-2.5.3.pre3-18.8.firefly 似乎有加上 OnTheSpot 的 patch, 只要修改 /etc/chinese/xcin/xcinrc, 將
+
+(define INPUT_STYLE		'(Root OverTheSpot))
+
+	改成:
+
+(define INPUT_STYLE		'(Root OverTheSpot OnTheSpot))
+
+	即可讓 gnome-terminal 這類原本只能用 root 模式的程式用 OnTheSpot (輸入法小視窗固定在螢幕左上角)
+
+----------------------------------------------------------------------------------------------------
+
+* gdm 沒有 XFCE4 的解法
+
+	直接用 switchdesk XFCE4 將 XFCE4 設定為預設的 Windows Manager.
+
+	1. 安裝 xfce-utils-4.0.1-1
+	2. 以 root 身份修改 /usr/bin/switchdesk-helper, 在 
+	
+    TWM)
+        [ ! -x /usr/X11R6/bin/twm ] && NotFound TWM
+        DNAME="twm"
+        NEW_XCLIENTS="$DATADIR/Xclients.twm"
+        ;;
+	
+	   下方加上 
+	
+    XFCE4)
+        [ ! -x /usr/bin/xfce4 ] && NotFound XFCE4
+        DNAME="xfce4"
+        NEW_XCLIENTS="$DATADIR/Xclients.xfce4"
+        ;;
+
+	3. 執行 switchdesk XFCE4 即可將預設 Window Manager 設定成 Xfce4
+
+	註： Fedora Core 2 已納入 XFCE4， 無此問題。
+
+----------------------------------------------------------------------------------------------------
+
+* sendmail 只聽 localhost:25
+
+	不知道是不是 fedora 內附的 sendmail 把 sendmail.cf 改過了, 只有監聽 localhost:25 (怪的是, 我升級到 fedora 都一個多禮拜後才出現此狀況). 到 /etc/mail 下執行 touch *.cf 後再 make ; service sendmail restart 後才恢復正常.
+
+----------------------------------------------------------------------------------------------------
+
+* 英文字間距過寬
+
+	在向晶慧借來的筆記型電腦上安裝的 fedora 就遇到此情況。 即使安裝了 firefly 的 rpm 檔還是沒有改善。 依據螢火飛所寫的中文字型完全解決方案及螢火飛的討論區， 做了一些更改後就沒這問題了。 但是不確定是哪個步驟可修正此問題。
+
+	1. 修改 /etc/gtk/gtkrc.zh_T.big5 及 /etc/gtk/gtkrc.zh_TW.utf8 在 -taipei-*-medium-r-normal--*-*-*-*-*-*-big5-0,\ 上加上一列 -DynaLab-MingliU-medium-r-normal--16-*-*-*-c-*-big5-0,\ 。 當然了有事先用 xttmgr 安裝過 Windows 上的細明體。 個人猜測應該是這個步驟修正字距過寬的問題。
+
+	2. 安裝 libXft 並在 /etc/ld.so.conf 內將 /usr/lib 加到第一列後執行 ldconfig
+
+----------------------------------------------------------------------------------------------------
+
+* 改用 Fedora Core 2 與 IIIMF ，升級 xinitrc 後就沒有中文輸入法
+
+	因為 xinitrc-3.41-1 的 xinitrc script 會去尋找 /etc/xinitrc/xinitrc.d/*.sh 但是放在該目錄的 script 卻沒有 .sh 的副檔名。 只要在該目錄內做一個副檔名有 .sh 的 symbolic link 即可。
+
+----------------------------------------------------------------------------------------------------

@@ -1,0 +1,34 @@
+vim:ts=4:tw=1024:enc=utf8
+--------------------------------------------------------------------------------
+* ARMulator 使用經驗
+
+	先到 http://www.uclinux.org/pub/uClinux/utilities/armulator/
+
+	把 gdb-5.0.tar.bz2 解開後， 上 ARMulator 的修補檔， 以下列命令即可編譯ok
+	./configure --target=arm-elf
+
+	在上述網頁有預先編好的 kernel 及 romfs 可供測試。
+
+	armulator 吃的是 ELF 格式。 不能把已去掉 ELF 檔頭的 kernel 餵給它
+
+	為了搭配晶慧的 kernel (由 0x8000 開始執行， 在編譯 armulator 之前必須在上好修上述修補檔後修改 gdb-5.0/sim/arm/armmem.c)
+
+#else
+	/* the yuk's below are to work around a uClinux/mount options problem */
+
+	{ real_read_word,	real_write_word,	0x01000000, 0x00400000, }, /* 2.4 */
+	{ real_read_word,	_write_word,		0x01400000, 0x00400000, "boot.rom"},
+	{ real_read_word,	real_write_word,	0x02000000, 0x00400000, }, /* 2.0 */
+	{ real_read_word,	real_write_word,	0x02400000, 0x00001000, }, /* yuk!*/
+	{ real_read_word,	_write_word,		0x04000000, 0x00400000, "boot.rom"},
+	{ real_read_word,	real_write_word,	0x00000000, 0x00004000, },
+	
+	{ real_read_word,	real_write_word,	0x00000000, 0x00400000, }, //hdl++ 為了讓 armulator 可以將 kernel 載入 0x8000
+	{ real_read_word,	real_write_word,	0x18000000, 0x10000000, }, //hdl++ 原本是因為晶慧的 kernel 內的 arch/armnommu/kernel/head-generic.o 有一段程式碼。 會將位於 0x1810000 開始的 kernel 複製到 ram 後執行才加上這一筆記憶體區域。 但是實際執行時還是會出現 move() 非法存取 0x1810000
+
+
+	{ io_read_word,		io_write_word,		0xf0000000, 0x10000000, },
+#endif
+	{ fail_read_word,	fail_write_word, 	0, 			0 }
+};
+--------------------------------------------------------------------------------

@@ -1,0 +1,190 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+*  Virtual Private Network(VPN)--建立專屬的虛擬私有網路
+
+
+作者 : ADJ網路實驗室
+
+一.前言
+
+　　這篇主要是參考Netman網中人的文章" 架設VPN "稍加修改的...因為看到很多文章在討論 VPN 時...都只談到兩地之間的 VPN 連線...如台北--高雄之間...但是如果中間多一個點"台中"出來的話...那該怎麼辦呢?於是就想到既然目前走的是 Gateway - Gateway 的 Server&Client 的架構...那麼一台 VPN Server + 兩台 VPN Client 也應該沒問題才對...於是就有今天這樣的測試...
+　　
+　　目的: 假設以台中總公司為 VPN Server...台北.高雄分公司為 VPN Client...要讓台北的區網跟台中的區網要能夠互通....高雄的區網跟台中的區網也要互通...But 台北跟高雄之間不互通...
+　
+
+二.準備
+
+測試系統: 台北...台中...高雄皆為 Red Hat Linux 7.3 ...
+
+不了解什麼是 VPN 嗎? 參考這篇:
+
+1.Virtual Private Network: 虛擬私有網路
+
+2.這次實作主要是參考Netman提供的第二種替代方案...因為第一種我弄不出來...^_^...
+
+Download : vpnd-1.1.0.tar.gz
+
+所需資料 :
+
+　 台中 VPN Server :
+　　　　 Real: 11.22.33.44
+　　　　VPN: 192.168.0.1
+　
+　 台北 VPN Client_1:
+　　　　 Real: 11.22.33.55
+　　　　 VPN: 192.168.10.1
+　
+　高雄 VPN Client_2:
+　　　　 Real: 11.22.33.66
+　　　　VPN: 192.168.20.1　
+　
+　
+
+三.開始實作
+
+
+1.先進行台中 Server 與台北 Client 安裝工作﹕
+
+　(a)先在台中Server (11.22.33.44)上做安裝...Download Source 回來並放置在 /usr/local
+
+[root@mondeo local]# tar zxvf vpnd-1.1.0.tar.gz
+[root@mondeo local]# cd vpnd
+[root@mondeo vpnd]# ./configure
+[root@mondeo vpnd]# make
+[root@mondeo vpnd]# cp vpnd /usr/local/sbin
+[root@mondeo vpnd]# chmod +x /usr/local/sbin/vpnd
+[root@mondeo vpnd]# cp vpnd.conf vpnd.chat /etc
+[root@mondeo vpnd]# chmod 644 /etc/vpnd.conf /etc/vpnd.chat
+[root@mondeo vpnd]# chown root.root /etc/vpnd.conf /etc/vpnd.chat
+[root@mondeo vpnd]# ./vpnd -m
+[root@mondeo vpnd]# chmod 400 /etc/vpnd.key
+
+　　最後的 vpnd -m 是要產生 /etc/vpnd.key 檔﹐ 它必須只能被 root.root 擁有﹐而且只有 400 權限。
+
+　(b)再來編輯 /etc/vpnd.conf ﹐將所有內容全部換為如下句子﹕
+
+[root@mondeo etc]# vi /etc/vpnd.conf
+
+mode server
+client 11.22.33.55 10001
+server 11.22.33.44 10001
+local 192.168.0.1
+remote 192.168.10.1
+keyfile /etc/vpnd.key
+route1 192.168.10.0 255.255.255.0 192.168.10.1
+nocompress
+autoroute
+
+　(c) 將如下檔案打包﹕
+
+[root@mondeo home]# mkdir vpnd_client
+[root@mondeo home]# cp -a /etc/vpnd.* vpnd_client
+[root@mondeo home]# cp -a /usr/local/sbin/vpnd vpnd_client
+[root@mondeo home]# tar zcvf vpnd_client.tgz vpnd_client
+
+　(d) 將打包檔案copy到 台北VPN Client的機器上﹐並將檔案複製到合適的位置﹕
+
+[root@taipei home]# tar zxvf vpnd_client.tgz
+[root@taipei home]# cp -a vpnd_client/* /etc
+[root@taipei home]# mv /etc/vpnd /usr/local/sbin
+
+　(e) 修改 /etc/vpnd.conf ﹐使之設定與台中 VPN Server 相對應﹕
+
+[root@taipei home]# vi /etc/vpnd.conf
+
+mode client
+client 11.22.33.55 10001
+server 11.22.33.44 10001
+local 192.168.10.1
+remote 192.168.0.1
+keyfile /etc/vpnd.key
+route1 192.168.0.0 255.255.255.0 192.168.0.1
+nocompress
+autoroute
+
+　(f) 在 台中 Server 端執行執行如下命令﹕
+
+[root@taipei home]# /usr/local/sbin/vpnd -f /etc/vpnd.conf
+
+　　(測試成功後可以寫到 /etc/rc.d/rc.local 中)
+
+　　在 台北 Client 端執行執行如下命令﹕
+
+[root@taipei home]# /usr/local/sbin/vpnd -f /etc/vpnd.conf
+
+　　(測試成功後可以寫到 /etc/rc.d/rc.local 中)
+
+測試結果:
+(I)互 ping 對方Private IP...如果有回應...代表你就成功了...
+(II)同時你用 netstat -na|more 檢查...會發現兩邊的IP都建立一個 10001 Port
+(III)測試兩邊區網下的電腦是否能Link到...如在台北區網下: \\192.168.0.2 看能否看的到台中虛擬IP的資源分享..
+
+如要結束連線請執行﹕
+# killall vpnd
+
+
+2. 再新增台中 Server 跟高雄 Client 的 Tunnel :
+
+　(a)因為台中 Server 已設定過...所以只需要再建一個檔案即可:
+
+[root@mondeo etc]# cp vpnd.conf vpnd2.conf
+[root@mondeo etc]# vi vpnd2.conf
+
+mode server
+client 11.22.33.66 10002
+server 11.22.33.44 10002
+local 192.168.0.1
+remote 192.168.20.1
+keyfile /etc/vpnd.key
+route1 192.168.20.0 255.255.255.0 192.168.20.1
+nocompress
+autoroute
+
+　(b)接著把原先已建立的打包檔案再 copy一份到 高雄 VPN Client 的機器上﹐並將檔案複製到合適的位置﹕
+
+[root@kao home]# tar zxvf vpnd_client.tgz
+[root@kao home]# cp -a vpnd_client/* /etc
+[root@kao home]# mv /etc/vpnd /usr/local/sbin
+
+　(c)修改 /etc/vpnd.conf ﹐使之設定與台中 VPN Server 相對應﹕
+
+[root@kao home]# vi /etc/vpnd.conf
+
+mode client
+client 11.22.33.66 10002
+server 11.22.33.44 10002
+local 192.168.20.1
+remote 192.168.0.1
+keyfile /etc/vpnd.key
+route2 192.168.0.0 255.255.255.0 192.168.0.1
+nocompress
+autoroute
+
+(d)在 台中 Server 端執行執行如下命令﹕
+
+[root@taipei home]# /usr/local/sbin/vpnd -f /etc/vpnd2.conf
+
+(測試成功後可以寫到 /etc/rc.d/rc.local 中)
+
+在 高雄 Client 端執行執行如下命令﹕
+
+[root@taipei home]# /usr/local/sbin/vpnd -f /etc/vpnd.conf
+
+(測試成功後可以寫到 /etc/rc.d/rc.local 中)
+
+測試結果:
+(I)互 ping 對方Private IP...如果有回應...代表你就成功了...
+(II)同時你用 netstat -na|more 檢查...會發現兩邊的IP都建立一個 10002 Port
+(III)測試兩邊區網下的電腦是否能Link到...如在高雄區網下: \\192.168.0.2 看能否看的到台中虛擬IP的資源分享...
+
+如要結束連線請執行﹕
+# killall vpnd
+
+
+四 .大功告成
+
+　做到這個階段...也算是大功告成...以後不但可以讓台北.高雄的區網跟台中互通...還可以分享公司的共用資源...也算是一種省錢的方案...當然如果還有更多的點要延續下去...也是沒問題的啦...最後還是要感謝 Netman 的文件...幫助了很多人囉...
+
+
+----------------------------------------------------------------------------------------------------

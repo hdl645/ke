@@ -1,0 +1,48 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* 如何設定掛載點
+
+	1. 先在 /etc/auto.master 加入下列文字
+		/mnt    /etc/auto.mnt   --timeout=60
+
+		這一列文字是說將 /etc/auto.mnt 這個 indirect map 內指定 key 掛在 /mnt/key 之中
+
+	2. 撰寫 /etc/auto.mnt
+
+		a. loop device
+
+rh80_1	-fstype=iso9660,loop,ro,user,iocharset=big5,codepage=950	:/pub/iso/RedHat/psyche-i386-disc1.iso	
+		
+		b. device
+
+sda	-fstype=auto,rw,user,iocharset=big5,codepage=950			:/dev/sda
+cdrom	-fstype=iso9660,ro,user,iocharset=big5,codepage=950		:/dev/hdc
+win_c	-fstype=auto,ro,owner,user,iocharset=big5				:/dev/hdb1
+win_d	-fstype=vfat,rw,owner,user,iocharset=big5,codepage=950	:/dev/hdb5
+floppy	-fstype=auto,rw,owner,user,iocharset=big5,codepage=950	:/dev/fd0
+
+		c. Samba
+
+mpp17_c	-fstype=smbfs,username=Administrator,password=prontust810-2,iocharset=big5,codepage=cp950,gid=et810-2,fmask=644,dmask=755	://mpp17/C\$
+
+mpp17_iso	-fstype=smbfs,username=Administrator,password=prontust810-2,iocharset=big5,codepage=cp950,gid=et810-2,fmask=644,dmask=755	://mpp17/iso
+
+		使用 $ 前要加上倒斜線 \
+
+	注意事項:
+	
+		1. 掛載 loop device 時因為 loop device 同一時間內似乎只能掛載 8 個左右. 若無法再掛載時只會出現 No such file or directory. 不會有其它訊息. 不過 /var/log/messages 內會出現下列訊息:
+		Aug 12 11:54:50 mpp13 automount[31188]: >> mount: could not find any free loop device
+		Aug 12 11:54:50 mpp13 automount[31188]: mount(generic): failed to mount /pub/iso/RedHat/psyche-i386-disc2.iso (type iso9660) on /mnt/rh80_2
+
+		2. 掛載光碟時會自動上鎖, 必須等時間過期後自動卸載或手動卸載才能取出. 因此要注意軟碟是否已經卸載了再取出.
+
+		3. auto.mnt 是我自己仿照 /etc/auto.misc 格式做的. 預設沒有這個檔案.
+
+	問題:
+		在 Linux 下的 autofs 有沒有像 solaris 下的 autofs 有 direct map?
+
+		在 Linux 下的 autofs 可否透過 samba 卸載網芳?
+
+----------------------------------------------------------------------------------------------------

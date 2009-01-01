@@ -1,0 +1,332 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* proftpd 設定
+
+發表人 內容
+johntino
+漸有心得的小鳥
+
+註冊時間: 2002-07-20
+文章: 68
+來自: 會淹水的汐止
+人氣指數: 37.80
+=離線=
+ 發表於: 2003-01-02 17:58    文章標題: 看完Porftp文章後的補充說明
+
+ 
+剛剛看完魚子醬所提供的proftp的文章，覺得proftp的功能寫的還不是很夠，所以補充一下我個人測試過的功能給大家！下面的每個功能加在設定檔的最下面就可以了！enjoy
+
+#允許root可登入
+RootLogin on
+
+#允許上傳續傳
+AllowStoreRestart on
+
+#同個 IP 最多能登入幾個 Session 同一個 IP 只能登入一次
+MaxClientsPerHost 1
+
+#下面兩種選一種設定
+#設定 FTP 預設路徑在/home/ftp下;所有的帳號進入時都會到這個目錄下
+DefaultRoot /home/ftp !david =>除了david之外
+
+#根目錄是自己的home目錄 =>所有的帳號都會到家目錄
+DefaultRoot ~ !david =>除了david之外
+
+#流量控管 (25KB/Sec)
+RateReadBPS 25600
+RateReadFreeBytes 5120
+RateReadHardBPS on
+
+#只允許192.168.1的網段連上ftp
+<Limit LOGIN /*>
+Order allow,deny
+Allow from 192.168.1.
+Deny from all
+</Limit>
+
+#限制一個目錄下的權限
+<Directory /home/ftp/upload/*>
+
+<Limit READ> #可讀取
+AllowAll
+</Limit>
+
+<Limit WRITE> #可寫入
+AllowAll
+</Limit>
+
+<Limit DELE> #不可刪除
+DenyAll
+</Limit>
+
+<Limit RNFR> #不可更名
+DenyAll
+</Limit>
+
+<Limit MKD> #不可創造資料夾
+DenyAll
+</Limit>
+
+<Directory> 
+
+----------------------------------------------------------------------------------------------------
+
+* 自從更新到 1.2.8 版後一直無法連線
+
+	經檢查, 除了原本在 /etc/proftpd.conf 外還有 /usr/etc/proftpd.conf. 將 /usr/etc/proftpd.conf 改成連到 /etc/proftpd.conf 後重新啟動 xinetd 就沒問題了
+
+----------------------------------------------------------------------------------------------------
+
+* proftpd 建立獨立帳號
+
+※ 本文轉錄自 [LinuxApps] 看板
+
+作者: Admin (我是誰..) 看板: LinuxApps
+標題: [心得] proftpd 如何建立獨立帳號
+時間: Sun Nov 4 11:48:48 2001
+
+
+小弟最近無聊想架個 FTP 給同學上來, 但是又不想在系統上開帳號,
+經過前輩指點, 可以使用 proftpd 來達成, 以下就是小弟最近的安裝設定心得,
+可以不用在系統上開帳號, 直接建立獨立的使用者的範例, 還請各位前輩指教..
+
+1.先用 tarball 安裝 proftpd 程式, 因為前輩指點 rpm package 是有針對系統的,
+每個有使用 rpm 的 linux dist 所使用命名的 rpm 機制都不同, 所以不能混用亂裝..
+(安裝步驟就不多做介紹, 網路上已經有很多中文說明)
+
+2.安裝完成後, 主要就是設定 /etc/proftpd.conf 這個檔案,
+
+# 目錄架構
+# [/home/ftp]
+# .
+# |-- proftpd.group
+# |-- proftpd.user
+# `-- pub
+# |-- Download
+# |-- Filebase
+# `-- Upload
+#
+# proftpd.group, proftpd.user, /home/ftp 請設定權限為 400 以防別人看到密碼檔案,
+
+# 其他目錄設為 755 即可, 但是所有目錄檔案使用者與群組都要改成 ftp, 才能正確執行
+.
+
+# ----[proftpd.user]----
+# 匿名使用者
+ftp::14:50:FTP User:/home/ftp/pub:
+
+# 系統上的使用者 (這裡也要設才能登陸)
+admin:QJ.6M9I5hvBFs:501:503:user1:/home/admin:/bin/tcsh
+
+# 只屬於 proftpd 的使用者
+dog:ncZR71xl5BOZU:14:60:guest1:/home/ftp/pub:/bin/tcsh
+cat:RAPG3VDhTP3cs:14:60:guest2:/home/ftp/pub:bin/tcsh
+# -=-=[EOF]=-=-
+
+# ----[proftpd.group]----
+guest:x:50:
+user:x:60:
+# -=-=[EOF]=-=-
+
+# ----[ /etc/proftpd.conf ]----
+ServerName "Magic ABC FTP Site"
+ServerType inetd
+DefaultServer on
+DefaultRoot ~
+
+# 使用者與群組認證檔案的位置.
+AuthUserFile /home/ftp/proftpd.user
+AuthGroupFile /home/ftp/proftpd.group
+
+# Port 21 is the standard FTP port.
+Port 21
+
+# Umask 022 is a good standard umask to prevent new dirs and files
+# from being group and world writable.
+Umask 022
+
+# 設成 30 可以防止 DoS 攻擊, 但是只有 standalone 模式下有效.
+MaxInstances 30
+
+# 這裡最好設定 ftp 來啟動 proftpd, 有些範例都是用 nobody 還啟動,
+# 但是這樣的話, 就必須把目錄設使用者, 群組設成 nobody 才能把權限開為 400,
+# 不讓其他使用者可以看到密碼檔案內容.
+User ftp
+Group ftp
+
+# 開啟覆寫還有續傳的功能.
+<Directory /*>
+AllowOverwrite on
+AllowStoreRestart on
+</Directory>
+
+# 設定匿名且免密碼的登陸帳號.
+<Anonymous ~ftp>
+User ftp
+Group guest
+AnonRequirePassword off
+RequireValidShell off
+
+# 讓使用者用 anonymous 帳號登陸等於用 ftp 帳號登陸.
+UserAlias anonymous ftp
+
+# 一次同時最多匿名登陸上限.
+MaxClients 5
+
+# 設定登陸時的訊息檔名稱, 還有切換目錄的訊息檔名稱.
+DisplayLogin welcome.msg
+DisplayFirstChdir .message
+
+# 先關閉所有目錄的讀寫權限, 細部稍後再做設定.
+<Directory *>
+<Limit WRITE READ>
+DenyAll
+</Limit>
+</Directory>
+
+# 允許使用者在 Upload 目錄上傳.
+<Directory Upload>
+<Limit STOR MKD>
+AllowAll
+</Limit>
+<Limit READ RMD DELE>
+DenyAll
+</Limit>
+</Directory>
+
+# 允許使用者在 Download 目錄下載.
+<Directory Download>
+<Limit READ>
+AllowAll
+</Limit>
+</Directory>
+</Anonymous>
+
+# 設定系統之外的使用者帳號 (只限 proftpd 登陸)
+<Anonymous ~guest>
+User ftp
+Group user
+
+# 開啟密碼檢查.
+AnonRequirePassword on
+RequireValidShell off
+
+# 允許讀寫所有目錄.
+<Directory *>
+<Limit WRITE READ>
+AllowAll
+</Limit>
+</Directory>
+</Anonymous>
+# -=-=[EOF]=-=-
+
+3. 經過以上的範例, 使用者可以用匿名登陸, 並且不檢查密碼, 但是只能讀寫限定的目錄,
+
+如果使用者以 dog 或是 cat 帳號登陸, 需要輸入密碼, 但是就可以讀寫所有目錄,
+如果使用者以 admin 帳號登陸需要輸入密碼, 然後就會跑到自己家的目錄下面...
+
+4. 這篇只是教學建立獨立帳號的範例, 我那讀寫權限設定很陽春, 不要照著模仿喔..
+其他 proftpd 還可以設定很多種全限, 像是鎖ip, 鎖user, 容量, 流量, 等等..
+就先不在這多做介紹, 還請大家多多見諒...
+
+by Admin 2001/11/3
+
+多謝分享.........thx
+試了一下,user的建立,是用"ftpasswd"這個perl script
+簡單的用法如下:
+sudo ftpasswd --passwd --name=$virtual_user --gid=$real_user_gid --uid=$real_user_uid --home=$virtual_user_home --shell=/bin/false --file=/output_file/proftpd.passwd
+
+如果用system的ftp,當ftp uid = 101, ftp gid = 102,建立virtual_user,在/home/virtual_user登陸......................
+
+mkdir -p /home/virtual_user && chown -R ftp:ftp /home/virtual_user
+sudo ftpasswd --passwd --name=virtual_user --uid=101 --gid=102 --home=/home/virtual_user --shell=/bin/false --file=/etc/proftpd.passwd
+打兩次默碼
+
+vi proftpd.conf
+----------------------------------------------------------------------------------
+ServerName "Magic ABC FTP Site"
+ServerType inetd
+DefaultServer on
+DefaultRoot ~
+............................
+.............................
+#不要張默碼檔,放在/home/ftp裹呀
+AuthUserFile /etc/proftpd.passwd
+.............................
+.............................
+<Anonymous ~virtual_user>
+# user是virtual_user,不是ftp
+#否則如下的WRITE/READ=DenyAll會無效
+User virtual_user
+Group ftp
+AnonRequirePassword on
+RequireValidShell off
+
+<Directory *>
+<Limit WRITE READ>
+DenyAll
+</Limit>
+</Directory>
+</Anonymous>
+------------------------------------------------------------------------------------
+cat /etc/ftpuser
+---------------------------------------------------------------------------------
+root
+someuser
+.......
+........
+ftp
+-----------------------------------------------------------------------------------
+ftp | root | someuser就無法用ftp登入,
+但virtual_user一樣可以用ftp的身份登入
+
+
+----------------------------------------------------------------------------------------------------
+
+* proftpd 限制可瀏覽IP
+
+編輯/etc/proftpd.conf
+
+<Directory 限制IP瀏覽的目錄>
+Order Allow, Deny
+Allow 可以瀏覽的網段
+Deny ALL
+</Directory>
+
+或
+<Directory /var/ftp/MyLove>
+Order Allow, Deny
+Deny ALL
+Allow 192.168.0/26 #代表192.168.0.1~192.168.0.254
+</Directory>
+
+
+----------------------------------------------------------------------------------------------------
+
+* proftpd 無法啟動
+
+	自從更新 xinetd 後一直沒有 listen port 21, 8102.
+
+	從來在 /var/log/messages 發現如下訊息:
+
+	Oct  8 16:02:48 mpp13 xinetd[14034]: Bad log_on_failure flag: RECORD [line=28]
+
+	而 proftpd 建議的設定檔(放在/etc/xinetd.d內的)內容如下:
+
+	service ftp
+{
+        flags           = REUSE
+        socket_type     = stream
+        instances       = 50
+        wait            = no
+        user            = root
+        server          = /usr/sbin/proftpd
+        bind            = <the-ip-you-wish-to-bind-to>
+        log_on_success  = HOST PID
+        log_on_failure  = HOST RECORD
+}
+
+	就是 log_on_failure = HOST RECORD 那一列出問題, 把 RECORD 刪除後就 ok 了
+
+----------------------------------------------------------------------------------------------------

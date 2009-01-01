@@ -1,0 +1,50 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* RedHat 預設的 sendmail 無法發信
+	因為在 /etc/mail/sendmail.mc 內有一行限定了 sendmail 監聽的範圍
+		
+		DAEMON_OPTIONS(`Port=smtp,Addr=127.0.0.1, Name=MTA') 	
+
+	把它改成：
+
+		DAEMON_OPTIONS(`Port=smtp,Addr=0.0.0.0, Name=MTA') 	
+
+	再重新 make 成 cf 檔，並重新啟動 sendmail 即可。
+
+參考資料：
+	http://linux.vbird.idv.tw/linux_server/0380sendmail.php
+
+----------------------------------------------------------------------------------------------------
+
+* sendmail 與 TCP Wrapper 的搭配
+	直接在 /etc/hosts.allow, /etc/hosts.deny 以 sendmail : XXX : XXX 指定即可。
+
+----------------------------------------------------------------------------------------------------
+
+* 刪除傳送不出去的郵件
+
+	 find /var/spool/mqueue ! -size 0 -a -type f -exec rm -f {} \;
+----------------------------------------------------------------------------------------------------
+
+* 認證已做好，但是無法連線(POP3及SMTP都不行)
+
+	在 /var/log/messages 會出現 pam_access.so 無法取得 tty name。找了好久，終於找到了。原因是因為先前為了測試讓指定帳號只能從特定IP進來(/etc/security/access.conf)。但是要讓此檔案生效必須在/etc/pam.d/system-auth內加上:
+
+account 		required      /lib/security/pam_access.so
+
+	但是檢查一下 /etc/pam.d/pop
+
+#%PAM-1.0
+auth       required	pam_stack.so service=system-auth
+account    required	pam_stack.so service=system-auth
+
+	及 /etc/pam.d/smtp
+
+#%PAM-1.0
+auth       required	pam_stack.so service=system-auth
+account    required	pam_stack.so service=system-auth
+
+	都會呼叫到 system-auth，變成說我們之前為了限制帳號加的設定讓 POP3 及 SMTP 無法連線。目前做法是先將 /etc/pam.d/system-auth加的accout required /lib/security/pam_access.so暫時拿掉。收信或利用認證寄信都沒問題了。
+
+----------------------------------------------------------------------------------------------------

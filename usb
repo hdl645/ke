@@ -1,0 +1,1167 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* USB 隨身碟使用法
+
+	若開機有啟動 USB, 則插入隨身碟時可以用 lsmod 觀察到 usb-storage 被載入, 而且後方 used 欄位必須為數字 (剛插入應該為 0). 此時, 只要把 /dev/sda1 掛載起來即可. 若要卸載則要先把 /dev/sda1 unmount 掉, 建議也要把 usb-storage 用 rmmod 拿掉. 不然到下一次插入隨身碟時似乎會抓不到. 另外, 李名栓的 mp3 player 掛載不起來, 出現未指定 filesystem type.
+
+	經過 debug 後發現 (用 dd 把 /dev/sda 及 /dev/sda1 dump 出來)
+	
+	1. 張林智, 林創華的隨身碟插入後 
+		+ /dev/sda  為硬碟分割表
+		+ /dev/sda1 為啟動磁區及FAT
+		==> 所以, 掛載時採用 /dev/sda1
+
+	2. 李名栓的 MP3 Player 插入後
+		+ /dev/sda  為啟動磁區
+		+ /dev/sda1 為 FAT
+		==> 所以, 掛載時要採用 /dev/sda
+	
+
+----------------------------------------------------------------------------------------------------
+
+* 由軟碟轉跳USB開機
+
+作者: tinyding (丁丁) 看板: Linux
+標題: 【心得】由軟碟轉跳 USB 拇指碟開機.
+時間: Wed Jul 23 22:09:53 2003
+
+title: Linux 平台,由軟碟轉跳 USB 拇指碟開機,心得分享.
+date: 2003.07.23
+Shih-Ning Ding, tinyding @ ksts 點 seed 點 net 點 tw
+
+上上個星期左右,一位台南友人來電問到"是否能在 USB 拇指碟中灌 Linux,並且使用
+它來開機...",當時我因先前並沒有處理過 USB 相關週邊裝置的經驗,但根據網路上
+的一些文件來看,驅動 USB 週邊裝置好像沒有什麼問題的樣子,所以我的回應是"可以
+試試看...". 底下是在這次過程中所遭遇的問題及解決方式.
+
+首先,因這次拿到的 USB 拇指碟有 256 Mb,而我平常在用的系統是 Debian Linux,所
+以,我下個
+debootstrap woody USBDIR ftp://ftp.tku.edu.tw/OS/Linux/distributions/debian
+命令就可以在 USBDIR 目錄下安裝一個小型的 Debian Linux 系統,然後概估一下
+USBDIR 目錄的總容量為何?是否小於 256 Mb?並以 fdisk 規劃一下 USB 拇指碟(
+如註一.),再定其上的 Filesystem(我選用 ext3 filesystem.)後,就可以把 USBDIR
+整個 tar 至所 Mount 上 USB 拇指碟中的第一個 partition 中了.
+
+其次,因為在測試的 PC 上,上面的 BIOS 並沒有支援 USB 裝置開機,所以,我們初步
+構想是由軟碟先開,再轉跳 USB 拇指碟繼續完成整個開機流程...
+根據這兩個網頁文件(
+http://www.neweasier.com/article/2003-03-14/1047604787.html
+http://rz-obrian.rz.uni-karlsruhe.de/knoppix-usb/
+)上所描述的,我們得知在把 USB 裝置驅動起來後,得等個幾秒鐘讓它完成初始註冊等
+動作,因此,在開機軟碟片上我們得擺上驅動 USB 相關的模組、kernel 、ext3 相關
+模組以及延時程式(參註二.). 起初,我企圖使用 knoppix 的 1.44 MB 開機軟碟來把
+上述的東西都裝在一張軟碟片(容量大小為 80*2*18*512)上,但我失敗了(其中
+minisys.gz 的內容如註三.).後來改採 tomsrtbt 套件(網址
+http://www.toms.net/rb/)FAQ 文件中所述的,以 /dev/fd0u1722 來製作一張擁有
+1.68 Mb 容量的軟碟(82*2*21*512),才解決擠不進一張軟碟的問題.
+
+最後,由 Knoppix CD 開機,將其中的 /lib/modules/2.4.20-xfs 目錄下的所有檔案,
+都拷貝到 USB 拇指碟下的 /lib/modules/2.4.20-xfs 去存放著,並再修改一下 USB
+拇指碟下的 /etc/fstab 檔案內容為註四所表之後,重新開機,以特製的軟碟片來啟
+動,在執行了 /linuxrc 後,把 USB 相關的週邊裝置驅動起來,並等待個四秒,
+/linuxrc 結束,並以 /dev/sda1 為 root filesystem,轉跳 USB 拇指碟去繼續完成
+未完的開機流程...
+
+在這些都成功的運作之後,我不禁地又回頭再思慮了一番,難道在軟碟上的 minisys.gz
+的內容,真的不能再縮減了嗎?!我引用 busybox 程式 670 Kb 就只為了執行 sleep
+的功能?而 /linuxrc 上還有一支 insmod 的功能是由 /static/ash 所完成的,這個
+功能 busybox 不是也有嗎?另,busybox 除了能編譯成 static 外,不是還可以執行
+像 tar/gzip/df 等等的許多功能嗎?那我能將這許多在這次都用不著的功能,把它們
+由 busybox 中給剔除嗎? 所幸! BusyBox 套件中的 Config.h 定義了 busybox 可
+執行的功能,將不需要的功能弄成註解即可(如註五.),經過 busybox 的瘦身後,我總
+算把驅動 USB 拇指碟的開機軟碟給弄回標準地 1.44 MB 規格(註六與註七.).
+
+Have Fun! ^_^
+
+
+註一.
+==== 規劃 USB 拇指碟 ======
+debian:~# fdisk /dev/sda
+
+Command (m for help): p
+
+Disk /dev/sda: 260 MB, 260045312 bytes
+8 heads, 62 sectors/track, 1023 cylinders
+Units = cylinders of 496 * 512 = 253952 bytes
+
+Device Boot Start End Blocks Id System
+/dev/sda1 1 1023 253673 83 Linux
+
+Command (m for help):
+
+============================
+
+註二.
+==== Ext3 與 USB 裝置驅動模組以及 busybox 做為延時 sleep 之用. ======
+debian:/mnt# ls modules/ -l
+總計 373
+-rw-r--r-- 1 root root 87626 2003-03-26 22:59 ext3.o
+-rw-r--r-- 1 root root 74090 2003-03-26 22:59 jbd.o
+-rw-r--r-- 1 root root 87035 2003-03-26 22:59 usbcore.o
+-rw-r--r-- 1 root root 24860 2003-03-26 22:59 usb-ohci.o
+-rw-r--r-- 1 root root 69971 2003-03-26 22:59 usb-storage.o
+-rw-r--r-- 1 root root 28684 2003-03-26 22:59 usb-uhci.o
+
+debian:/mnt# ls static/ -l
+總計 824
+-rwxr-xr-x 1 root root 150580 2002-07-26 20:09 ash
+-rwxr-xr-x 1 root root 687064 2003-07-16 16:01 busybox
+lrwxrwxrwx 1 root root 3 2003-07-16 14:28 init -> ash
+lrwxrwxrwx 1 root root 3 2003-07-16 14:28 sh -> ash
+
+=====================================================================
+
+註三.
+==== 修改 Knoppix 開機軟碟中的 minisys.gz 以便驅動 USB 拇指碟 ======
+debian:/cdrom# ls -l
+總計 27
+lrwxrwxrwx 1 root root 12 2003-07-16 14:28 bin -> /KNOPPIX/bin
+lrwxrwxrwx 1 root root 13 2003-07-16 14:28 boot -> /KNOPPIX/boot
+drwxr-xr-x 2 root root 1024 1998-04-23 07:30 cdrom
+drwxr-xr-x 3 root root 6144 2001-09-18 02:36 dev
+drwxr-xr-x 2 root root 1024 2003-02-24 06:40 etc
+drwxr-xr-x 2 root root 1024 2000-06-15 13:17 KNOPPIX
+lrwxrwxrwx 1 root root 12 2003-07-16 14:28 lib -> /KNOPPIX/lib
+-rwxr-xr-x 1 root root 201 2003-07-16 16:03 linuxrc
+-rwxr-xr-x 1 root root 11957 2003-05-06 22:48 linuxrc.knoppix
+drwx------ 2 root root 1024 2003-07-16 13:53 lost+found
+drwxr-xr-x 2 root root 1024 2000-05-28 21:59 mnt
+drwxr-xr-x 3 root root 1024 2003-07-16 14:09 modules
+lrwxrwxrwx 1 root root 12 2003-07-16 14:28 opt -> /KNOPPIX/opt
+drwxr-xr-x 2 root root 1024 1997-11-27 00:23 proc
+lrwxrwxrwx 1 root root 13 2003-07-16 14:28 sbin -> /KNOPPIX/sbin
+drwxr-xr-x 2 root root 1024 2003-07-16 16:02 static
+lrwxrwxrwx 1 root root 8 2003-07-16 14:28 tmp -> /var/tmp
+lrwxrwxrwx 1 root root 12 2003-07-16 14:28 usr -> /KNOPPIX/usr
+
+debian:/cdrom# cat linuxrc
+#!/static/sh
+insmod /modules/jbd.o
+insmod /modules/ext3.o
+insmod /modules/usbcore.o
+insmod /modules/usb-uhci.o
+insmod /modules/usb-ohci.o
+insmod /modules/usb-storage.o
+
+/static/busybox sleep 4
+exit 0
+
+debian:/cdrom# ls modules/ -l
+總計 383
+-rwxr-xr-x 1 root root 9185 2003-03-27 00:05 cloop.o
+-rw-r--r-- 1 root root 87626 2003-03-26 22:59 ext3.o
+-rw-r--r-- 1 root root 74090 2003-03-26 22:59 jbd.o
+drwxr-xr-x 2 root root 1024 2003-07-16 14:26 scsi
+-rw-r--r-- 1 root root 87035 2003-03-26 22:59 usbcore.o
+-rw-r--r-- 1 root root 24860 2003-03-26 22:59 usb-ohci.o
+-rw-r--r-- 1 root root 69971 2003-03-26 22:59 usb-storage.o
+-rw-r--r-- 1 root root 28684 2003-03-26 22:59 usb-uhci.o
+
+debian:/cdrom# ls static/ -l
+總計 824
+-rwxr-xr-x 1 root root 150580 2002-07-26 20:09 ash
+-rwxr-xr-x 1 root root 687064 2003-07-16 16:01 busybox
+lrwxrwxrwx 1 root root 3 2003-07-16 14:28 init -> ash
+lrwxrwxrwx 1 root root 3 2003-07-16 14:28 sh -> ash
+
+debian:/cdrom# ldd static/busybox
+not a dynamic executable
+
+
+====================================================================
+
+註四.
+==== 修改 USB 拇指碟中的 /etc/fstab 檔之內容 ======
+/dev/sda1 / ext3 defaults,errors=remount-ro 0 1
+proc /proc proc defaults 0 0
+
+===================================================
+
+註五.
+==== 節錄 BusyBox-0.60.5 中的 Config.h 檔. ======
+/* vi: set sw=4 ts=4: */
+// This file defines the feature set to be compiled into busybox.
+// When you turn things off here, they won′t be compiled in at all.
+//
+//// This file is parsed by sed. You MUST use single line comments.
+// i.e., //#define BB_BLAH
+//
+//
+// BusyBox Applications
+//#define BB_ADJTIMEX
+//#define BB_AR
+#define BB_ASH
+// #define BB_BASENAME
+#define BB_CAT
+// #define BB_CHGRP
+// #define BB_CHMOD
+// #define BB_CHOWN
+
+==================================================
+
+註六.
+==== 經瘦身後的 busybox,重新再放到 minisys.gz 中 ======
+debian:/mnt# ls -l
+總計 4
+drwxr-xr-x 2 root root 1024 2003-07-20 16:11 dev
+-rwxr-xr-x 1 root root 290 2003-07-20 15:39 linuxrc
+drwxr-xr-x 3 root root 1024 2003-07-20 15:26 modules
+drwxr-xr-x 2 root root 1024 2003-07-20 19:50 static
+
+debian:/mnt# ls dev/ -l
+總計 0
+crw------- 1 root root 4, 0 1999-05-14 07:55 console
+prw------- 1 root root 0 2000-01-17 02:31 initctl
+brw-rw---- 1 root root 1, 250 2001-04-15 08:44 initrd
+crw-rw-rw- 1 root root 1, 3 1998-05-06 04:32 null
+brw------- 1 root root 1, 1 1998-05-06 04:32 ram
+brw------- 1 root root 1, 0 1998-05-06 04:32 ram0
+brw------- 1 root root 1, 1 1998-05-06 04:32 ram1
+brw------- 1 root root 1, 11 1998-05-06 04:32 ram11
+brw------- 1 root root 1, 12 1998-05-06 04:32 ram12
+brw------- 1 root root 1, 13 1998-05-06 04:32 ram13
+brw------- 1 root root 1, 14 1998-05-06 04:32 ram14
+brw------- 1 root root 1, 15 1998-05-06 04:32 ram15
+brw------- 1 root root 1, 19 1998-05-06 04:32 ram19
+brw------- 1 root root 1, 2 1998-05-06 04:32 ram2
+brw------- 1 root root 1, 3 1998-05-06 04:32 ram3
+brw------- 1 root root 1, 4 1998-05-06 04:32 ram4
+brw------- 1 root root 1, 5 1998-05-06 04:32 ram5
+brw------- 1 root root 1, 6 1998-05-06 04:32 ram6
+brw------- 1 root root 1, 7 1998-05-06 04:32 ram7
+brw------- 1 root root 1, 8 1998-05-06 04:32 ram8
+brw------- 1 root root 1, 9 1998-05-06 04:32 ram9
+lrwxrwxrwx 1 root root 4 2003-07-20 19:51 ramdisk -> ram0
+
+debian:/mnt# cat linuxrc
+#!/static/sh
+/static/busybox insmod /modules/jbd.o
+/static/busybox insmod /modules/ext3.o
+/static/busybox insmod /modules/usbcore.o
+/static/busybox insmod /modules/usb-uhci.o
+/static/busybox insmod /modules/usb-ohci.o
+/static/busybox insmod /modules/usb-storage.o
+
+/static/busybox sleep 4
+
+debian:/mnt# ls modules/ -l
+總計 374
+-rw-r--r-- 1 root root 87626 2003-03-26 22:59 ext3.o
+-rw-r--r-- 1 root root 74090 2003-03-26 22:59 jbd.o
+drwxr-xr-x 2 root root 1024 2003-07-16 14:26 scsi
+-rw-r--r-- 1 root root 87035 2003-03-26 22:59 usbcore.o
+-rw-r--r-- 1 root root 24860 2003-03-26 22:59 usb-ohci.o
+-rw-r--r-- 1 root root 69971 2003-03-26 22:59 usb-storage.o
+-rw-r--r-- 1 root root 28684 2003-03-26 22:59 usb-uhci.o
+
+debian:/mnt# ls static/ -l
+總計 534
+-rwxr-xr-x 1 root root 541976 2003-07-20 19:48 busybox
+lrwxrwxrwx 1 root root 7 2003-07-20 19:51 sh -> busybox
+
+=======================================================
+
+註七.
+==== 最後定案的驅動 USB 拇指碟的開機軟碟內容 ======
+debian:/floppy# ls -l
+總計 1319
+-rwxr--r-- 1 root root 33 2003-07-20 16:47 display
+-rwxr--r-- 1 root root 6 2003-07-20 16:56 f1
+-r-xr--r-- 1 root root 7828 2003-07-20 16:29 ldlinux.sys
+-rwxr--r-- 1 root root 414660 2003-07-20 20:31 minisys.gz
+-rwxr--r-- 1 root root 148 2003-07-20 21:16 syslinux.cfg
+-rwxr--r-- 1 root root 925720 2003-03-26 22:59 vmlinuz
+
+debian:/floppy# cat syslinux.cfg
+DEFAULT linux
+
+PROMPT 1
+
+DISPLAY display
+
+F1 f1
+
+LABEL linux
+KERNEL vmlinuz
+APPEND ramdisk_size=100000 vga=normal initrd=minisys.gz root=/dev/sda1
+
+
+
+debian:/floppy# cat display
+USB Boot
+
+Press F1 for help.
+
+debian:/floppy# cat f1
+linux
+
+=================================================== 
+
+----------------------------------------------------------------------------------------------------
+
+* USB Mouse 用法
+
+	mkdir /dev/input
+	mknod /dev/input/mice c 13 63
+
+	修改 /etc/X11/XF86Config-4 (假設用 XFree86 4.X版)
+
+	無滾輪
+Section "InputDevice"
+     Identifier  "USB Mice"
+     Driver      "mouse"
+     Option      "Protocol"   "IMPS/2"
+     Option      "Device"     "/dev/input/mice"
+EndSection
+
+	有滾輪
+Section "InputDevice"
+     Identifier  "USB Mice"
+     Driver      "mouse"
+     Option      "Protocol"   "IMPS/2"
+     Option      "Device"     "/dev/input/mice"
+     Option      "ZAxisMapping"   "4 5"
+     Option      "Buttons"        "5"
+EndSection
+
+	若只有一隻 USB Mouse 則尋找 CorePointer 並改成下列
+InputDevice "USB Mice" "CorePointer"
+
+	若還有別的 Mouse (含 PS/2) 則尋找 CorePointer 並再加上(不是替代)
+InputDevice "USB Mice" "SendCoreEvents"
+
+	重新啟動 X Server 後應該就可以了
+
+----------------------------------------------------------------------------------------------------
+
+* USB 無線網卡
+
+◆RedHat安裝X-Mirco USB無線網卡【無痛手冊】 精皇科技 蘇介吾 92/12/26
+----------------------------------------------------------------------------
+http://www.delitek.com/non-cgi/usr/5/5_17.txt
+
+■前言
+
+現在無線網路已經十分普及, 但是目前大多是在 Windows平台上支援較多, 像是坊間
+的書籍或是廠商提供的驅動程式, 而對 Linux平台的支援較少 (也是有相關網站, 不過
+大多是英文的, 比較麻煩) , 有鑑於此, 小弟特別製做這份簡易安裝手冊, 希望藉此能
+夠讓無線網路能在台灣的 Linux玩家心中不再是遙不可及的解決方案, 也引起更多台灣
+的廠商能夠重視Linux 的市場!
+
+小弟的 Linux功力不深, 只考過 RHCE 8.0而已, 有任何問題歡迎大家一起共同討論^^
+
+Your Sincerely
+Patrick Su 92/12/26 19:05p @ Taipei.
+-
+◢▄◣ 精皇科技有限公司 MIS 蘇介吾 Patrick
+˙˙█ 北市復興南路二段318號2F (和平東路口)
+◥˙◤ TEL:(02)8733-3636 免付費0800-588-880
+▂██ 專營: 無線網路設備 / 滑鼠 / 藍芽耳機
+▂█◤ 網站: http://www.delitek.com/
+
+----------------------------------------------------------------------------
+
+■感謝
+
+ZyDAS 益勤科技 (http://www.zydas.com.tw) 的工程師魏先生的技術指導.
+
+恆逸資訊教RHCE的張耀仁老師, 謝謝他教我RedHat的一些技術, 讓我學到很多東西^^
+
+----------------------------------------------------------------------------
+
+■本文
+
+
+◆(0).準備
+-----------
+
+這是Linux 安裝 USB無線網卡的教學, 因為各家使用的 Chip 不同, 所以本文件只適
+用於 X-Mirco的 USB無線網卡 (晶片型號 : ZyDAS 1201). 如果您已經有別家的無線網
+卡, 可能要參考其他文件, 或是寫信 or 打電話去問問解決方案.
+
+首先, 當然您要已經會安裝 Linux, 可以參考吳佳諺工作室的 RedHat安裝教學文件:
+
+RedHat 9.0 --> http://aasir.com/pdf/chinese_install.pdf 或
+
+Fedora Core 1 -->
+http://ftp.ncnu.edu.tw/Documentation/Linux/RedHat_Fedora_eBook/chapter0102.pdf
+
+請先確認您的 Linux版本, 通常建議安裝 RedHat 8.0以上的版本 (或 9.0), 小弟個
+人建議如果您的 RedHat 還不熟的話, 或是電腦很爛的話, 不要急著裝最新的 Fedora,
+因為相容性怪怪的, 我用過 AMD K6-2 和 Pentium 2的電腦來裝都會失敗 (跟本沒跑完
+就出現錯誤訊息而結束), 但是在 Pentium 4的機器上則沒啥問題順利安裝完畢
+
+裝完 Linux後, 建議切換在 Command Mode (文字列命令模式), 可以打 init 3或用
+vi把 /etc/inittab裡面有個 5改成 3然後存檔離開再重開機. ( id:5:initdefault: )
+
+一開始要先用 RJ-45 以有線方式來連線, 才能把驅動程式下載到本機, 不然就要用
+別台電腦來下載, 再存到 1.44的磁片上, 最後再 mount -t vfat /dev/fd0 , 感覺起
+來比較麻煩, 只要能把驅動程式拷貝到 Linux本機為目的, 不管你用什麼方法都OK!
+
+
+◆(1).檔案下載
+---------------
+
+首先要下載相關檔案, 請連到 http://www.delitek.com/usb.tgz 去下載, 您可以在
+文字模式下, 打 cd / 切換到根目錄下, 再打 wget http://www.delitek.com/usb.tgz
+即可下載.
+
+[root@redhat9 /]$ cd /
+[root@redhat9 /usb]$ wget http://www.delitek.com/usb.tgz
+
+--14:28:05-- http://www.delitek.com/usb.tgz
+=> `usb.tgz′
+Resolving www.delitek.com... done.
+Connecting to www.delitek.com[61.30.43.18]:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 963,788 [application/x-tar]
+
+100%[====================================>] 963,788 377.39K/s ETA 00:00
+
+14:28:07 (377.39 KB/s) - `usb.tgz′ saved [963788/963788]
+
+
+◆(2).解壓縮 usb.tgz
+---------------------
+
+下載完畢之後, 請打 tar xzvf usb.tgz 將其解壓縮, 會自動建立一個目錄叫 /usb
+
+usb/
+usb/usbcore/
+usb/usbcore/usbcore-2.4.10.tar.gz
+usb/usbcore/usbcore-2.4.14.tar.gz
+usb/usbcore/usbcore-2.4.15.tar.gz
+usb/usbcore/usbcore-2.4.18.tar.gz
+usb/usbcore/usbcore-2.4.1.tar.gz
+usb/usbcore/usbcore-2.4.20.tar.gz
+usb/usbcore/usbcore-2.4.21.tar.gz
+
+usb/usbcore/usbcore-2.4.2.tar.gz
+usb/usbcore/usbcore-2.4.5.tar.gz
+usb/usbcore/usbcore-2.4.7.tar.gz
+usb/zdsta-1.0.4/
+usb/zdsta-1.0.4/add-ons/
+usb/zdsta-1.0.4/add-ons/keygen/
+usb/zdsta-1.0.4/add-ons/keygen/Makefile
+usb/zdsta-1.0.4/add-ons/keygen/keygen.c
+usb/zdsta-1.0.4/.cvsignore
+usb/zdsta-1.0.4/CHANGES
+usb/zdsta-1.0.4/COPYING
+usb/zdsta-1.0.4/Configure
+usb/zdsta-1.0.4/FAQ
+usb/zdsta-1.0.4/LICENSE
+usb/zdsta-1.0.4/Makefile
+usb/zdsta-1.0.4/README
+usb/zdsta-1.0.4/THANKS
+usb/zdsta-1.0.4/TODO
+usb/zdsta-1.0.4/config.in
+usb/zdsta-1.0.4/doc/
+usb/zdsta-1.0.4/doc/codingstd/
+usb/zdsta-1.0.4/doc/codingstd/format.hfile
+usb/zdsta-1.0.4/doc/codingstd/format.srcfile
+usb/zdsta-1.0.4/doc/codingstd/format.srcfile.c
+usb/zdsta-1.0.4/doc/codingstd/format.srcfile.html
+usb/zdsta-1.0.4/doc/codingstd/linux.CodingStyle
+usb/zdsta-1.0.4/doc/Makefile
+usb/zdsta-1.0.4/doc/capturefrm.txt
+usb/zdsta-1.0.4/doc/config.debug
+usb/zdsta-1.0.4/doc/config.linux-wlan-ng
+usb/zdsta-1.0.4/doc/releasepolicy.txt
+usb/zdsta-1.0.4/doc/rh71notes
+usb/zdsta-1.0.4/doc/impnotes/
+usb/zdsta-1.0.4/doc/impnotes/l8s_uses.obj
+usb/zdsta-1.0.4/doc/impnotes/structptr.obj
+usb/zdsta-1.0.4/doc/prism2/
+usb/zdsta-1.0.4/doc/prism2/ridlist-mib.html
+usb/zdsta-1.0.4/doc/prism2/ridlist-mib.txt
+usb/zdsta-1.0.4/doc/prism2/ridlist-rid.html
+usb/zdsta-1.0.4/doc/prism2/ridlist-rid.txt
+usb/zdsta-1.0.4/etc/
+usb/zdsta-1.0.4/etc/pcmcia/
+usb/zdsta-1.0.4/etc/pcmcia/Makefile
+usb/zdsta-1.0.4/etc/pcmcia/wlan-ng
+usb/zdsta-1.0.4/etc/pcmcia/wlan-ng.conf
+usb/zdsta-1.0.4/etc/Makefile
+usb/zdsta-1.0.4/etc/rc.wlan
+usb/zdsta-1.0.4/etc/wlan.hotplug
+usb/zdsta-1.0.4/etc/wlan/
+usb/zdsta-1.0.4/etc/wlan/Makefile
+usb/zdsta-1.0.4/etc/wlan/shared
+usb/zdsta-1.0.4/etc/wlan/wlan.conf
+usb/zdsta-1.0.4/etc/wlan/wlancfg-DEFAULT
+usb/zdsta-1.0.4/man/
+usb/zdsta-1.0.4/man/Makefile
+usb/zdsta-1.0.4/man/nwepgen.man
+usb/zdsta-1.0.4/man/wlancfg.man
+usb/zdsta-1.0.4/man/wlanctl-ng.man
+usb/zdsta-1.0.4/man/wland.man
+usb/zdsta-1.0.4/scripts/
+usb/zdsta-1.0.4/scripts/.cvsignore
+usb/zdsta-1.0.4/scripts/Makefile
+usb/zdsta-1.0.4/scripts/Makefile.get_options
+usb/zdsta-1.0.4/scripts/get_version.c
+usb/zdsta-1.0.4/scripts/pda.pl
+usb/zdsta-1.0.4/scripts/get_version
+usb/zdsta-1.0.4/scripts/make.opts
+usb/zdsta-1.0.4/src/
+usb/zdsta-1.0.4/src/include/
+usb/zdsta-1.0.4/src/include/wlan/
+usb/zdsta-1.0.4/src/include/wlan/.cvsignore
+usb/zdsta-1.0.4/src/include/wlan/p80211conv.h
+usb/zdsta-1.0.4/src/include/wlan/p80211hdr.h
+usb/zdsta-1.0.4/src/include/wlan/p80211ioctl.h
+usb/zdsta-1.0.4/src/include/wlan/p80211meta.h
+usb/zdsta-1.0.4/src/include/wlan/p80211metamib.h
+usb/zdsta-1.0.4/src/include/wlan/p80211metamsg.h
+usb/zdsta-1.0.4/src/include/wlan/p80211mgmt.h
+usb/zdsta-1.0.4/src/include/wlan/p80211msg.h
+usb/zdsta-1.0.4/src/include/wlan/p80211netdev.h
+usb/zdsta-1.0.4/src/include/wlan/p80211req.h
+usb/zdsta-1.0.4/src/include/wlan/p80211types.h
+usb/zdsta-1.0.4/src/include/wlan/wlan_compat.h
+usb/zdsta-1.0.4/src/Makefile
+usb/zdsta-1.0.4/src/README
+usb/zdsta-1.0.4/src/mkmeta/
+usb/zdsta-1.0.4/src/mkmeta/.cvsignore
+usb/zdsta-1.0.4/src/mkmeta/Makefile
+usb/zdsta-1.0.4/src/mkmeta/mkmetadef.c
+usb/zdsta-1.0.4/src/mkmeta/mkmetadefhead.txt
+usb/zdsta-1.0.4/src/mkmeta/mkmetastruct.c
+usb/zdsta-1.0.4/src/mkmeta/mkmetastructhead.txt
+usb/zdsta-1.0.4/src/nwepgen/
+usb/zdsta-1.0.4/src/nwepgen/.cvsignore
+usb/zdsta-1.0.4/src/nwepgen/Makefile
+usb/zdsta-1.0.4/src/nwepgen/nwepgen.c
+usb/zdsta-1.0.4/src/p80211/
+usb/zdsta-1.0.4/src/p80211/.cvsignore
+usb/zdsta-1.0.4/src/p80211/Makefile
+usb/zdsta-1.0.4/src/p80211/p80211conv.c
+usb/zdsta-1.0.4/src/p80211/p80211frm.c
+usb/zdsta-1.0.4/src/p80211/p80211mod.c
+usb/zdsta-1.0.4/src/p80211/p80211netdev.c
+usb/zdsta-1.0.4/src/p80211/p80211req.c
+usb/zdsta-1.0.4/src/p80211/p80211wep.c
+usb/zdsta-1.0.4/src/p80211/p80211wext.c
+usb/zdsta-1.0.4/src/prism2/
+usb/zdsta-1.0.4/src/prism2/Makefile
+usb/zdsta-1.0.4/src/prism2/driver/
+usb/zdsta-1.0.4/src/prism2/driver/.cvsignore
+usb/zdsta-1.0.4/src/prism2/driver/Makefile
+usb/zdsta-1.0.4/src/prism2/driver/hfa384x.c
+usb/zdsta-1.0.4/src/prism2/driver/hfa384x_usb.c
+usb/zdsta-1.0.4/src/prism2/driver/prism2mgmt.c
+usb/zdsta-1.0.4/src/prism2/driver/prism2mib.c
+usb/zdsta-1.0.4/src/prism2/driver/prism2sta.c
+usb/zdsta-1.0.4/src/prism2/include/
+usb/zdsta-1.0.4/src/prism2/include/prism2/
+usb/zdsta-1.0.4/src/prism2/include/prism2/hfa384x.h
+usb/zdsta-1.0.4/src/prism2/include/prism2/prism2mgmt.h
+usb/zdsta-1.0.4/src/prism2/include/prism2/ws01uph.h
+usb/zdsta-1.0.4/src/prism2/ridlist/
+usb/zdsta-1.0.4/src/prism2/ridlist/.cvsignore
+usb/zdsta-1.0.4/src/prism2/ridlist/Makefile
+usb/zdsta-1.0.4/src/prism2/ridlist/mkmiblist.c
+usb/zdsta-1.0.4/src/prism2/ridlist/mkridlist.c
+usb/zdsta-1.0.4/src/prism2/ridlist/ridlist.dat
+usb/zdsta-1.0.4/src/shared/
+usb/zdsta-1.0.4/src/shared/Makefile
+usb/zdsta-1.0.4/src/shared/p80211meta.c
+usb/zdsta-1.0.4/src/shared/p80211metamib.c
+usb/zdsta-1.0.4/src/shared/p80211metamsg.c
+usb/zdsta-1.0.4/src/shared/p80211types.c
+usb/zdsta-1.0.4/src/skeleton/
+usb/zdsta-1.0.4/src/skeleton/Makefile
+usb/zdsta-1.0.4/src/skeleton/skeleton.c
+usb/zdsta-1.0.4/src/wlancfg/
+usb/zdsta-1.0.4/src/wlancfg/.cvsignore
+usb/zdsta-1.0.4/src/wlancfg/Makefile
+usb/zdsta-1.0.4/src/wlancfg/wlancfg.c
+usb/zdsta-1.0.4/src/wlanctl/
+usb/zdsta-1.0.4/src/wlanctl/.cvsignore
+usb/zdsta-1.0.4/src/wlanctl/Makefile
+usb/zdsta-1.0.4/src/wlanctl/help.c
+usb/zdsta-1.0.4/src/wlanctl/wlanctl.c
+usb/zdsta-1.0.4/src/wlanctl/wlanctl.h
+usb/zdsta-1.0.4/src/wland/
+usb/zdsta-1.0.4/src/wland/.cvsignore
+usb/zdsta-1.0.4/src/wland/Makefile
+usb/zdsta-1.0.4/src/wland/wland.c
+usb/zdsta-1.0.4/config.out
+usb/zydas1201.doc
+
+
+◆(3).檢視目錄
+---------------
+
+再打 cd /usb 切換到該目錄下
+
+[root@redhat9 /]$ cd /usb
+[root@redhat9 /usb]$ ll <- 註: ll 是 Redhat 8.0以上才有的功能, 等於 ls -l
+total 100
+drwxr-xr-x 2 root root 4096 Dec 26 14:26 usbcore
+drwxr-xr-x 8 root root 4096 Sep 12 12:29 zdsta-1.0.4
+-rw-r--r-- 1 root root 86528 Dec 26 14:26 zydas1201.doc
+[root@redhat9 /usb]$
+
+
+◆(4).確定 Linux版本
+---------------------
+
+請打 uname -a 查看
+
+[root@redhat9 /usb]$ uname -a
+Linux redhat9.delitek.com 2.4.20-8 #1 Thu Mar 13 17:54:28 EST 2003 i686 i686
+i386 GNU/Linux
+
+拿筆記下你的 Linux kernel (核心) 版本是 2.4.20-8
+
+
+◆(5).修補 Linux Kernel
+------------------------
+
+確定你要更新的版本是 2.4.20-8, 對應到的壓縮檔是 usbcore-2.4.20.tar.gz
+
+
+[root@mail /usb]$ cd /usb/usbcore/
+
+[root@mail /usb/usbcore]$ ls
+usbcore-2.4.1.tar.gz usbcore-2.4.18.tar.gz usbcore-2.4.5.tar.gz
+usbcore-2.4.10.tar.gz usbcore-2.4.2.tar.gz usbcore-2.4.7.tar.gz
+usbcore-2.4.14.tar.gz usbcore-2.4.20.tar.gz
+usbcore-2.4.15.tar.gz usbcore-2.4.21.tar.gz
+
+解壓縮 usbcore-2.4.20.tar.gz
+
+[root@mail /usb/usbcore]$ tar xzvf usbcore-2.4.20.tar.gz
+usbcore-2.4.20/
+usbcore-2.4.20/config.in
+usbcore-2.4.20/Configure
+usbcore-2.4.20/Makefile
+usbcore-2.4.20/scripts/
+usbcore-2.4.20/scripts/.cvsignore
+usbcore-2.4.20/scripts/Makefile
+usbcore-2.4.20/scripts/Makefile.get_options
+usbcore-2.4.20/scripts/get_version.c
+usbcore-2.4.20/scripts/pda.pl
+usbcore-2.4.20/scripts/get_version
+usbcore-2.4.20/scripts/make.opts
+usbcore-2.4.20/usbcore/
+usbcore-2.4.20/usbcore/Makefile
+usbcore-2.4.20/usbcore/devices.c
+usbcore-2.4.20/usbcore/devio.c
+usbcore-2.4.20/usbcore/drivers.c
+usbcore-2.4.20/usbcore/hub.c
+usbcore-2.4.20/usbcore/hub.h
+usbcore-2.4.20/usbcore/inode.c
+usbcore-2.4.20/usbcore/usb.c
+usbcore-2.4.20/usbcore/usb-debug.c
+usbcore-2.4.20/usbcore/hcd.h
+usbcore-2.4.20/config.out
+
+
+[root@mail /usb/usbcore]$ cd usbcore-2.4.20
+
+[root@mail /usb/usbcore/usbcore-2.4.20]$ ll
+total 28
+-rwxr-xr-x 1 root root 4153 Jul 18 05:16 Configure
+-rw-r--r-- 1 root root 628 Jul 18 05:16 Makefile
+-rw-r--r-- 1 root root 29 Jul 18 05:16 config.in
+-rw-r--r-- 1 root root 198 Nov 28 16:05 config.out
+drwxr-xr-x 2 root root 4096 Nov 28 16:05 scripts
+drwxr-xr-x 2 root root 4096 Nov 28 16:23 usbcore
+
+
+打 make config
+
+=====================================================================
+Linux source directory [/usr/src/linux-2.4]: <- 直接按 ENTER
+
+Linux source tree /usr/src/linux-2.4 is incomplete or missing!
+See the HOWTO for a list of FTP sites for current kernel sources.
+
+Configuration failed
+
+make: *** [config] Error 1
+=====================================================================
+
+如果出現以上錯誤, 表示 Kernel 的 Source 沒裝, 請安裝以下兩個檔案:
+
+gcc-3.2.2-5.i386.rpm 和 kernel-source-2.4.20-8.i386.rpm
+
+請繼續步驟(6), 如果沒有出現錯誤, 請跳到步驟(7).
+
+
+◆(6).補裝 gcc 和 kernel-source
+--------------------------------
+
+光碟應該會掛吧 ^^ 放入 RedHat 9.0 的第二片光碟 [Disk 2]
+
+打 mount /mnt/cdrom
+
+再打 cd /mnt/cdrom/RedHat/RPMS/
+
+安裝 gcc
+
+[root@redhat9 /mnt/cdrom/RedHat/RPMS]$ rpm -ivh gcc-3.2.2-5.i386.rpm
+warning: gcc-3.2.2-5.i386.rpm: V3 DSA signature: NOKEY, key ID db42a60e
+Preparing... ########################################### [100%]
+1:gcc ########################################### [100%]
+
+安裝 kernel-source
+
+[root@redhat9 /mnt/cdrom/RedHat/RPMS]$ rpm -ivh kernel-source-2.4.20-8
+[root@redhat9 /RPMS]$ rpm -ivh kernel-source-2.4.20-8.i386.rpm
+warning: kernel-source-2.4.20-8.i386.rpm: V3 DSA signature: NOKEY, key ID db42a6
+Preparing... ########################################### [100%]
+1:kernel-source ########################################### [100%]
+
+
+◆(7).產生 .config 這個隱藏檔
+------------------------------
+
+[root@redhat9 /mnt/cdrom/RedHat/RPMS]$ cd /usr/src/linux-2.4 <- 切換到Kernel
+的Source目錄
+[root@redhat9 /usr/src/linux-2.4]$ ls
+arch Documentation kernel README
+configs drivers lib REPORTING-BUGS
+COPYING fs MAINTAINERS Rules.make
+COPYING.modules include Makefile scripts
+CREDITS init mm tmp_include_depends
+crypto ipc net
+
+[root@redhat9 /usr/src/linux-2.4]$ cd configs
+
+[root@redhat9 /usr/src/linux-2.4/configs]$ ls
+kernel-2.4.20-athlon.config kernel-2.4.20-i586-smp.config
+kernel-2.4.20-athlon-smp.config kernel-2.4.20-i686-bigmem.config
+kernel-2.4.20-i386-BOOT.config kernel-2.4.20-i686.config
+kernel-2.4.20-i386.config kernel-2.4.20-i686-smp.config
+kernel-2.4.20-i386-smp.config kernel-2.4.20-x86_64.config
+kernel-2.4.20-i586.config kernel-2.4.20-x86_64-smp.config
+
+打 cp /usr/src/linux-2.4/configs/kernel-2.4.20-i686.config ../.config
+
+◆注意! 記得要copy 的是 kernel-2.4.20-i686.config 這個檔, 拷貝到
+/usr/src/linux-2.4/.config 這個檔案裡. 當然, 如果你是雙CPU 就要用 smp
+那個檔, 或是 AMD Athlon 的cpu, 或是你打 uname -a 在查看 kernel 的版本
+時, 發現裝的不是 i686 那個版本的 Kernel, 那就要拷背別的檔案.
+
+
+打 cd /usb/usbcore/usbcore
+
+再重新安裝一次 kernel 的修補檔 (patch file).
+
+執行 make config
+
+===============================================================
+Linux source directory [/usr/src/linux-2.4]: <- 按 ENTER 繼續
+
+The current kernel build date is Thu Mar 13 17:54:28 2003.
+Module install directory [/lib/modules/2.4.20-8]:
+
+Configuration successful.
+===============================================================
+
+再打 make all
+
+最後再打 make install
+
+
+◆(.檢查 prism2_usb 模組有沒有掛上
+-------------------------------------
+
+先打 lsmod 查看有沒有 prism2_usb 這個模組
+
+==============================================================
+[root@redhat9 /]$ lsmod
+Module Size Used by Not tainted
+nls_iso8859-1 3516 1 (autoclean)
+ide-cd 35708 1 (autoclean)
+cdrom 33728 0 (autoclean) [ide-cd]
+udf 98400 0 (autoclean)
+parport_pc 19076 1 (autoclean)
+lp 8996 0 (autoclean)
+parport 37056 1 (autoclean) [parport_pc lp]
+autofs 13268 0 (autoclean) (unused)
+3c59x 30704 0
+p80211 25612 1 [prism2_usb]
+keybdev 2944 0 (unused)
+mousedev 5492 0 (unused)
+hid 22148 0 (unused)
+input 5856 0 [keybdev mousedev hid]
+usb-uhci 26348 0 (unused)
+usbcore 70304 1 [prism2_usb hid usb-uhci]
+ext3 70784 2
+jbd 51892 2 [ext3]
+==============================================================
+
+再打 modprobe prism2_usb 讓系統抓到它, OK 之後再打一次 lsmod
+
+==============================================================
+prism2_usb 150496 1
+==============================================================
+
+看... 不就有了嗎?
+
+
+◆(9).安裝 zdsta
+-----------------
+
+[root@redhat9 /]$ cd /usb/zdsta-1.0.4/
+
+[root@redhat9 /usb/zdsta-1.0.4]$ ls
+add-ons config.in Configure doc FAQ Makefile README src TODO
+CHANGES config.out COPYING etc LICENSE man scripts THANKS
+
+
+一樣依序執行 make config
+
+usb/zdsta-1.0.4[root@redhat9 /usb/zdsta-1.0.4]$ make config
+
+-------------- Linux WLAN Configuration Script -------------
+The default responses are correct for most users.
+Build Prism2.5 USB (_usb) driver? (y/n) [y]: <- 按 ENTER
+Linux source directory [/usr/src/linux-2.4]: <- 按 ENTER
+
+The kernel source tree is version 2.4.20-8.
+The current kernel build date is Thu Mar 13 17:54:28 2003.
+
+Module install directory [/lib/modules/2.4.20-8]: <- 按 ENTER
+
+It looks like you have a System V init file setup.
+
+Prefix for build host compiler? (rarely needed) []: <- 按 ENTER
+Build for debugging (see doc/config.debug) (y/n) [n]: <- 按 ENTER
+
+Configuration successful.
+
+
+再執行 make all
+
+[root@redhat9 /usb/zdsta-1.0.4]$ make all
+
+最後再執行 make install
+
+[root@redhat9 /usb/zdsta-1.0.4]$ make install
+
+[root@redhat9 /usb/zdsta-1.0.4]$ cd /
+
+
+◆(10).新增無線網路設定檔 (wlan0)
+----------------------------------
+
+打 ifconfig 查看有哪些網路設備啟用中, 目前只有 eth0 和 lo (loopback)
+
+[root@redhat9 /]$ ifconfig
+eth0 Link encap:Ethernet HWaddr 00:B0:D0:48:7B:D1
+inet addr:192.168.1.102 Bcast:192.168.1.255 Mask:255.255.255.0
+UP BROADCAST RUNNING MULTICAST MTU:1500 Metric:1
+RX packets:1209857 errors:0 dropped:0 overruns:0 frame:0
+TX packets:464099 errors:0 dropped:0 overruns:0 carrier:1
+collisions:0 txqueuelen:100
+RX bytes:1802142333 (1718.6 Mb) TX bytes:32226565 (30.7 Mb)
+Interrupt:5 Base address:0xec80
+
+lo Link encap:Local Loopback
+inet addr:127.0.0.1 Mask:255.0.0.0
+UP LOOPBACK RUNNING MTU:16436 Metric:1
+RX packets:202 errors:0 dropped:0 overruns:0 frame:0
+TX packets:202 errors:0 dropped:0 overruns:0 carrier:0
+collisions:0 txqueuelen:0
+RX bytes:13303 (12.9 Kb) TX bytes:13303 (12.9 Kb)
+
+
+切換到 /etc/sysconfig/network-scripts/ 目錄下
+
+[root@redhat9 /]$ cd /etc/sysconfig/network-scripts/
+
+etc/sysconfig/network-scripts[root@redhat9 /etc/sysconfig/ne
+ifcfg-eth0 ifdown-isdn ifup-aliases ifup-plusb ifup-wireless
+ifcfg-lo ifdown-post ifup-ippp ifup-post init.ipv6-global
+ifdown ifdown-ppp ifup-ipv6 ifup-ppp network-functions
+ifdown-aliases ifdown-sit ifup-ipx ifup-routes network-functions-ipv6
+ifdown-ippp ifdown-sl ifup-isdn ifup-sit
+ifdown-ipv6 ifup ifup-plip ifup-sl
+
+打 cat 查看 ifcfg-eth0 的內容
+
+[root@redhat9 /]$ cat ifcfg-eth0
+
+=================
+DEVICE=eth0
+BOOTPROTO=dhcp <- 目前 eth0 網路卡是用 dhcp (自動抓ip) 來啟用.
+ONBOOT=yes
+=================
+
+將 ifcfg-eth0 拷貝到 wlan0
+
+[root@redhat9 /]$ cp ifcfg-eth0 wlan0
+
+用 vi 去編輯 wlan0
+
+[root@redhat9 /]$ vi wlan0
+
+=================
+DEVICE=eth0 <- 只要把 DEVICE=eth0 改成 DEVICE=wlan0
+BOOTPROTO=dhcp
+ONBOOT=yes
+=================
+
+只要把 eth0 改成 wlan0 即可, 醬子 wlan0無線網卡也是用 dhcp的方式去自動取得ip
+
+
+但若要指定ip位置, 請改成
+=========================
+DEVICE=wlan0
+IPADDR=192.168.1.111 <- 192.168.1.111 是我手動指定的, 當然你可以依你的喜
+NETMASK=255.255.255.0 好去做調整, 但預設值是 192.168.1.x 的網段 (由無
+NETWORK=192.168.1.0 線路由器來指派, 但Gateway固定是 192.168.1.254,
+BROADCAST=192.168.1.255 就是那台 Wireless Router 的ip位置, 您可以打開IE
+ONBOOT=yes 或 Mozilla 瀏覽器, 再輸入 http://192.168.1.254
+GATEWAY=192.168.1.254 去修改設定.
+=========================
+
+vi的操作很簡單, 就連續按兩下 d 可以消一行, 把全部消掉之後, 再按 i 新增, 在
+Linux中大小寫有時有差別, 最好照著打, 然後按 :wq 存檔離開.
+
+
+◆(11).修改 /etc/rc.local 檔
+-----------------------------
+
+這是Linux 一開始就執行的自動批次檔 (等於M$的autoexec.bat或程式集裡面的
+"啟動" ) , 用 vi 去編輯.
+
+[root@redhat9 /]$ vi /etc/rc.local
+
+==================================================================
+#!/bin/sh
+#
+# This script will be executed *after* all the other init scripts.
+# You can put your own initialization stuff in here if you don′t
+# want to do the full Sys V style init stuff.
+
+touch /var/lock/subsys/local
+==================================================================
+
+加入以下兩行 (遊標移到最下面一行, 再按 o 新增)
+
+wlanctl-ng wlan0 dot11req_mibset mibattribute=p2CnfPortType=1p2CnfPortTypemibatt
+wlanctl-ng wlan0 lnxreq_autojoin ssid=X-Micro authtype=opensystemauthtype
+
+然後一樣按 :wq 存檔離開 (注意上面兩行一樣要小心大小寫打錯!)
+
+最後只要打 reboot 重開機即可.
+
+
+◆(12).成果驗收
+----------------
+
+重開機後, 以 root 登入, 打 ifconfig 查詢
+
+[root@localhost ~]$ ifconfig
+
+eth0 Link encap:Ethernet HWaddr 00:B0:D0:48:7B:D1
+inet addr:192.168.1.102 Bcast:192.168.1.255 Mask:255.255.255.0
+UP BROADCAST RUNNING MULTICAST MTU:1500 Metric:1
+RX packets:3 errors:0 dropped:0 overruns:0 frame:0
+TX packets:2 errors:0 dropped:0 overruns:0 carrier:0
+collisions:0 txqueuelen:100
+RX bytes:1240 (1.2 Kb) TX bytes:684 (684.0 b)
+Interrupt:5 Base address:0xec80
+
+lo Link encap:Local Loopback
+inet addr:127.0.0.1 Mask:255.0.0.0
+UP LOOPBACK RUNNING MTU:16436 Metric:1
+RX packets:12 errors:0 dropped:0 overruns:0 frame:0
+TX packets:12 errors:0 dropped:0 overruns:0 carrier:0
+collisions:0 txqueuelen:0
+RX bytes:900 (900.0 b) TX bytes:900 (900.0 b)
+
+wlan0 Link encap:Ethernet HWaddr 00:02:72:04:5D:00
+inet addr:192.168.1.111 Bcast:192.168.1.255 Mask:255.255.255.0
+UP BROADCAST RUNNING MULTICAST MTU:1500 Metric:1
+RX packets:189 errors:0 dropped:0 overruns:0 frame:0
+TX packets:270 errors:0 dropped:0 overruns:0 carrier:0
+collisions:0 txqueuelen:100
+RX bytes:19630 (19.1 Kb) TX bytes:151543 (147.9 Kb)
+
+看吧, 抓到 wlan0 這個網路介面了!
+
+為了證明不是假的連上 internet (因為目前有兩張網卡在啟動, 所以關掉 eth0)
+, 請打 ifdown eth0
+
+[root@localhost ~]$ ifdown eth0
+
+再打一次 ifconfig , 看看是否 eth0 確實停用了.
+
+[root@localhost ~]$ifconfig
+lo Link encap:Local Loopback
+inet addr:127.0.0.1 Mask:255.0.0.0
+UP LOOPBACK RUNNING MTU:16436 Metric:1
+RX packets:12 errors:0 dropped:0 overruns:0 frame:0
+TX packets:12 errors:0 dropped:0 overruns:0 carrier:0
+collisions:0 txqueuelen:0
+RX bytes:900 (900.0 b) TX bytes:900 (900.0 b)
+
+wlan0 Link encap:Ethernet HWaddr 00:02:72:04:5D:00
+inet addr:192.168.1.111 Bcast:192.168.1.255 Mask:255.255.255.0
+UP BROADCAST RUNNING MULTICAST MTU:1500 Metric:1
+RX packets:194 errors:0 dropped:0 overruns:0 frame:0
+TX packets:275 errors:0 dropped:0 overruns:0 carrier:0
+collisions:0 txqueuelen:100
+RX bytes:19938 (19.4 Kb) TX bytes:151891 (148.3 Kb)
+
+打 ping 168.95.1.1 看看吧, 看能不能 ping 到 Hinet 的主 DNS ip.
+
+[root@localhost ~]$ ping 168.95.1.1
+PING 168.95.1.1 (168.95.1.1) 56(84) bytes of data.
+64 bytes from 168.95.1.1: icmp_seq=1 ttl=245 time=19.2 ms <- Ya! 成功了.
+64 bytes from 168.95.1.1: icmp_seq=2 ttl=245 time=18.2 ms
+
+--- 168.95.1.1 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1014ms
+rtt min/avg/max/mdev = 18.262/18.745/19.229/0.502 ms
+
+
+最後打一下 iwconfig 來檢查一下無線網卡的資訊.
+
+[root@localhost ~]$ iwconfig
+lo no wireless extensions.
+
+wlan0 IEEE 802.11-b ESSID:"X-Micro" Nickname:"X-Micro"
+Mode:Managed Frequency:2.462GHz Access Point: 00:02:72:04:86:DF
+Tx-Power:2500 dBm
+Retry min limit:7 RTS thr=2500 B Fragment thr=2500 B
+Encryption key:off
+Link Quality:199/92 Signal level:-84 dBm Noise level:-66 dBm
+Rx invalid nwid:0 Rx invalid crypt:0 Rx invalid frag:0
+Tx excessive retries:0 Invalid misc:0 Missed beacon:0
+
+eth0 no wireless extensions.
+
+----------------------------------------------------------------------------
+
+
+■備註:
+
+1. 官方安裝教學文件
+--------------------
+
+請用 Word 或 OpenOffice 來開啟 /usb/zydas1201.doc 這份文件.
+
+(感謝原廠 ZyDAS "益勤科技" 03-577-3309 提供).
+
+
+2. 無線網路安全設定(WEP)
+-------------------------
+
+沒設密碼的無線網路是很危險的, 很容易被別人盜連, 建議設定 WEP密碼 or 在無線
+路由器上設定某些網卡的 MAC Address才能連線 (請用 IE 或 Mozilla 連到
+http://192.168.1.254) 找到 Wireless 裡面的 Access Control 選項, 將你的 MAC
+Address 加入即可.
+
+至於詳細的設定, 請參考以下說明:
+
+a. 設定 WEP 密碼, 把以下兩行加入 /etc/rc.local 中
+
+wlanctl-ng wlan0 dot11req_mibset mibattribute=dot11WEPDefaultKeyID=0
+wlanctl-ng wlan0 dot11req_mibset mibattribute=dot11ExcludeUnencrypted=true
+wlanctl-ng wlan0 dot11req_mibset mibattribute=dot11PrivacyInvoked=true
+wlanctl-ng wlan0 dot11req_mibset mibattribute=dot11WEPDefaultKey0=12:34:56:78:90
+
+註: WEPDefaultKeyID=0 , 這個值有 0-3 四組可以選擇, 通常只要設第一組 0
+
+WEPDefaultKey0=12:34:56:78:90 <- 這個是第一組的64 bit加密, 長度要剛好
+為10碼, 是16進位的字元(0-9,a-f).
+如果要更安全, 就用128 bit加密, 則長度
+變成 26碼!! 記得密碼一定要等長才行喔!
+
+當然你高興的話, 也可以四組密碼都設 (WEPDefaultKey0～WEPDefaultKey3).
+只要記得修改組別時, 要把 DefaultKeyID=0 改成別的數字 (0-3).
+
+b. 網卡的 MAC Address 如何查看? 在 Linux 請打 ifconfig 即可查看.
+如果是 M$ 的 Windows 平台, 一樣在 MS-DOS模式 or 命令提示字元打
+ipconfig /all |more 即可.
+
+
+3.偵測工具 (感謝 ZyDAS原廠的魏先生提供!)
+-----------
+
+寄件者: Yuan-Gu Wei [ygwei@zydas.com.tw]
+寄件日期: 2003年12月26日星期五上午11:22
+收件者: Delitek - Patrick Su
+主旨: Simple Scripts file of ZD1201 STA
+
+蘇先生您好, 我將我之前寫的兩個簡單的 script file寄給您, 分別是setup.sh以及
+scan.sh , 這兩個檔案的目的是有所不同的, 第一個檔案(setup.sh)是設定如何去連上
+一台AP (Access Point), 由於這一個script file 只是我自己在測試 driver 時使用
+, 因此相當的陽春, 您需要將它改成您自己想要的設定, 主要改的部份為
+
+/sbin/wlanctl-ng wlan0 dot11req_mibset mibattribute=p2CnfPortType=1
+/sbin/wlanctl-ng wlan0 lnxreq_autojoin ssid=X-Micro authtype=sharedkey
+
+p2CnfPortType 目前有 0,1,2 三種, 0為 Ad-hoc, 1為 Infratructure, 2為 Auto.
+而lnxreq_autojoin 要改的部份則為那個 ssid 的部份. 如果是在 sharedkey的情況下
+, 您可能就要修改掉您的 WEP Key index 以及 Key 的設定了. 此外, 那個 scan.sh是
+讓您作 site survey使用的, 它是讓您可以方便的找出目前的環境可以搜尋到哪些AP是
+存在的. 並且show出這些AP的設定.
+
+如果有問題的話, 歡迎再來信討論.
+
+◆scan.sh
+============================================================================
+#!/bin/sh
+/sbin/wlanctl-ng wlan0 dot11req_scan bsstype=any bssid=00:00:00:00:00:00 \
+scantype=both probedelay=0 channellist="01:02:03:04:05:06:07:08:09:0a:0b:0c:0d:00" \
+minchanneltime=200 maxchanneltime=1000 ssid="X-Micro"
+/sbin/wlanctl-ng wlan0 dot11req_mibget mibattribute=p2CommunicationScanresult
+============================================================================
+
+◆setup.sh
+============================================================================
+#!/bin/sh
+
+if [ $1 = "opensystem" ]; then
+
+/sbin/wlanctl-ng wlan0 dot11req_mibset mibattribute=dot11ExcludeUnencrypted=false
+/sbin/wlanctl-ng wlan0 dot11req_mibset mibattribute=dot11PrivacyInvoked=false
+/sbin/wlanctl-ng wlan0 dot11req_mibset mibattribute=p2CnfPortType=1
+/sbin/wlanctl-ng wlan0 lnxreq_autojoin ssid=X-Micro authtype=opensystem
+
+else
+
+/sbin/wlanctl-ng wlan0 dot11req_mibset mibattribute=dot11WEPDefaultKeyID=0
+/sbin/wlanctl-ng wlan0 dot11req_mibset mibattribute=dot11ExcludeUnencrypted=true
+/sbin/wlanctl-ng wlan0 dot11req_mibset mibattribute=dot11PrivacyInvoked=true
+/sbin/wlanctl-ng wlan0 dot11req_mibset mibattribute=dot11WEPDefaultKey0=12:34:56:78:90
+/sbin/wlanctl-ng wlan0 dot11req_mibset mibattribute=p2CnfPortType=1
+/sbin/wlanctl-ng wlan0 lnxreq_autojoin ssid=X-Micro authtype=sharedkey
+
+fi
+============================================================================
+
+
+4.其他參考資料
+---------------
+
+這個網站也有很多無線網路的文件 http://www.linux-wlan.com
+
+若您是 PCMCIA 的, 請參考這個網站 http://pcmcia-cs.sourceforge.net
+
+----------------------------------------------------------------------------
+(End)
+
+最後這是我們公司 (精皇科技) 的無線網路討論區, 歡迎參觀!!
+
+http://www.delitek.com
+
+-
+◢▄◣ 蘇介吾 (Patrick Su) 1971 / 家住台北景美
+˙˙█ RHCE 8.0 (RedHat Certified Engineer)
+◥˙◤ E-mail : afgn@mars.seed.net.tw
+▂██ 手機: 0922-714208　MSN: afgn@msn.com
+▂█◤ ICQ: 2095303 橋藝論壇: www.afgn.idv.tw
+
+
+----------------------------------------------------------------------------------------------------

@@ -1,0 +1,426 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* fontconfig
+
+作者: statue (statue) 看板: statue
+標題: fontconfig
+時間: Sun Jun 1 17:40:03 2003
+
+http://www.linuxfans.org/nuke/modules.php?name=News&file=article&sid=1184&mode=thread&order=0&thold=0
+
+原文：http://www.fontconfig.org/fontconfig-user.html
+作者：Keith Packard , HP Cambridge Research Lab
+翻譯：Conner Mo (connermo@hotmail.com) 中國Linux公社 (www.linuxfans.org )
+
+Fonts-conf
+
+名稱
+
+fonts.conf - 字體配置檔
+
+檔綱要
+
+/etc/fonts/fonts.conf
+/etc/fonts/fonts.dtd
+~/.fonts.conf
+
+描述
+
+fontconfig 是提供系統範圍內字體設置，定制和允許應用程式訪問的函數庫。
+
+功能概述
+
+fontconfig 包含兩個基本的模組，即讀取XML檔並建立內部配置的配置模組和接
+受請求的字體樣板並返回最接近所需字體的匹配模組。
+
+字體設置
+
+fontconfig的配置模組由FcConfig 資料類型，libexpat和FcConfigParse 組成。
+它掃描一個XML樹並將其中的資料處理成一個配置檔。從外部來看，函數庫的配置
+就是生成一個有效的XML樹並將其填充到FcConfigParse裏。應用程式改變運行中
+的函數庫配置的唯一途徑就是添加字體和目錄到用戶的字體檔列表中。
+
+這樣做的目的就是讓字體的配置變得相對靜態，並且可以盡可能多地讓其他應用
+程式共用。這種做法預計可以在應用程式相互傳遞字體名稱的時候獲得相對穩定
+的字體選擇。XML被選為配置檔的標準格式是因為它是一個既便于外部程式編輯
+又可以保留正確結構和語法的格式。
+
+字體的配置和字體的是分開的。需要採取自身特定匹配方式的應用程式可以從庫
+中訪問已有的字體並執行獨立的匹配操作。這樣做是為了讓應用程式可以從字體
+庫中挑選並選定合適的庫功能，而不是強迫他們選擇這個庫或者私有的設置機制
+。這種做法預計可以讓所有應用程式的字體配置可以集中在一處。集中的字體配
+置可以標準化和簡化字體安裝和定制。
+
+字體屬性
+
+雖然字體樣板可能包含任意基本屬性，但還是有一些眾所周知的屬性及其附帶的
+類型。Fontconfig利用這些屬性來匹配和完成字體配置。其他屬性則被用來為應
+用程式的渲染機制提供方便。
+
+屬性 類型 描述
+family String 字體家族名稱 （宋體，仿宋體等）
+style String 字體風格，包括粗度（weight）和傾斜度（slant）。
+slant Int 傾斜度，分為Italic（斜體）, oblique（傾斜羅馬體）或者
+roman（羅馬體）
+weight Int Light （微粗），medium（稍粗），demibold（略粗），
+bold（粗)或者black（黑體）
+size Double 尺寸大小
+aspect Double 在微調（hinting）前水平拉伸字體
+pixelsize Double 圖元大小
+spacing Int 間距，Proportial （可變），monospace （等寬） 或者
+charcell （字元單元）
+foundry String 字體廠商名稱
+antialias Bool 字體渲染是否採用抗鋸齒功能
+hinting Bool 渲染引擎是否採用微調
+verticallayout Bool 採用豎直排版
+autohint Bool 採用自動微調代替普通微調
+globaladvance Bool 使用字體全局間距資料
+file String 存儲字體的檔案名稱
+index Int 字體檔內的字體索引
+ftface FT_Face 使用指定的Freetype格式物件
+rasterizer String 正在使用的渲染引擎
+outline Bool 字型是否中空
+scalable Bool 字型是否可以放縮
+scale Double 尺寸->圖元的放縮比例
+dpi Double 目標點數/英寸
+rgba Int unkonw, rgb, brg, vrgb, vbgr, none -子圖元的幾何排列
+minspace Bool 是否採用最小行間距
+charset CharSet 字體的編碼
+lang String 字體支援的RFC-3066-style 語言列表。
+
+
+字體匹配
+
+Fontconfig用計算輸入的字體樣板和現有系統中字體的距離來實現字體匹配。最
+接近的字體將被選擇。這樣可以保證任何時候都能夠返回一個字體，但不能保證
+它和所需要的樣板類似。
+
+字體的匹配是從應用程式所創建的樣板開始的。請求字體的所有屬性會被搜集到
+一個樣板裏。每個屬性可以包含一個或多個值。它們按照優先等級排列。匹配列
+表前的被認為是比符和列表後的更加接近所需屬性。
+
+最初的字體樣板會按照配置檔中的編輯指令按順序修改。每個修改的過程包括匹
+配和其他一系列的編輯操作，並且每個匹配的過程都會執行相應的編輯操作。
+
+當字體樣板編輯修改完後，將會執行一系列默認的替換操作，從而標準化已有的
+一套屬性。這樣可以避免較低層程式在渲染的時候為不同的字體屬性提供一成不
+變的預設值。
+
+標準化後的字體樣板最後將和系統所有擁有的字體進行匹配。樣板和字體的距離
+是用它的每個屬性，廠商，編碼，家族，語言，間距，圖元大小，風格，斜度，
+粗度，防鋸齒，渲染引擎和中空測量出來的。這個列表是按照優先順序排序的，
+排在前面的元素比後面的元素占的比重大。
+
+這個規則中有一個特殊的例子：家族的名稱分成兩個部分，strong（強）和
+weak （弱）。強家族名稱在匹配中比語言元素優先順序要高，而弱家族名稱在
+匹配中比語言元素的優先順序別要低。這樣允許在文檔指定字體都不存在的時候
+，文檔的語言屬性可以指導字體的選擇。
+
+代表所屬字體的樣板會包含所有在那個樣板找到的屬性，而不只是在字體中找到
+的。這允許應用程式通過匹配系統傳送渲染指令和其他資料。最後，在配置檔中
+找到字體的編輯指令列表將被應用到樣板。修改過的樣板會返回給應用程式。
+
+返回的值包括充足的字體定位和渲染資訊，包括檔案名，圖元大小和其他渲染資
+料。因為沒有任何包含的資訊屬於Freetype庫，引用程式可以自由選擇渲染引擎
+，甚至直接獲取和訪問字體檔。
+
+在編輯檔中，匹配和編輯的序列是按照兩步執行的，因為需要有兩個不同操作。
+第一步是修改如何選取字體，為字體家族取別名和添加合適的預設值。第二步是
+修改如何渲染已選擇的字體。這些步驟必須應用在已選擇的字體上，而不是原有
+的字體樣板，因為經常會發生錯誤的匹配。
+
+字體名稱
+
+Fontconfig 為樣板提供一個可以讓函數庫接受和產生的文本表達。表達有三個
+部分，第一個是字體家族名稱列表，第二個是尺寸大小列表，最後是附加屬性列
+表：
+
+<families>-<point sizes>:<name1>=<values1>:<name2>=<values2>...
+<家族名稱>-<尺寸大小>:<名稱1>=<賦值1>:<名稱2>=<賦值2>...
+
+在列表中的賦值用逗號分開。名稱不需要包含家族或者尺寸大小，它們可以省略
+。另外，還有一些字元常量可以同時說明名稱和賦值。這裏有一些例子：
+名稱 含義
+Times-12 尺寸12的Times Roman
+Times-12:bold 尺寸12的Times粗體
+Courier:italic Courier默認尺寸的斜體
+Monospace:matrix=1 .1 0 1 用戶首選的採用人工斜體的等寬字體
+
+
+語言標記
+
+每種在資料庫中的字體包括一個它所支援的語言列表。這是用比較字體的unicode
+範圍和語言的正詞法（orthography）計算出來的。語言使用一個相容RFC-3066
+的命名標準並且具有兩個部分--ISO693語言標記跟一個連字元，然後是ISO3166
+國家代碼。連字元和國家代碼可以省略。
+
+Fontconfig在函數庫中有幾種語言的正詞法。除了重新編譯函數庫外，還沒有其
+他途徑添加新的正詞法。Fontconfig現在支援ISO639-1中命名的139種語言的122
+種，ISO 639-2的141種有雙字元編碼的語言和另外30種三字元編碼的語言。
+
+配置檔的格式
+
+Fontconfig的配置檔的存儲格式為XML格式。這種格式可以讓延伸的配置工具更
+加方便的編寫並且可以保證他們可以生成語法結構正確的檔。由於XML檔是純文
+字檔案，專家用戶可以用文本編輯器處理它們。
+
+Fontconfig 檔類型定義在延伸的實體"fonts.dtd"中，通常存儲在默認的字體設
+置目錄（/etc/fonts）。每個配置檔必須包括下列的結構：
+
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+...
+</fontconfig>
+
+<fontconfig>
+
+這是字體配置頂層的單元，可以按照任意順序包括dir, cache, include, match
+和alias單元。
+
+dir
+這個單元包含一個會被掃描目錄名稱，掃描到字體檔將被包括到可用的字體列表中裏。
+
+cache
+這個單元包含一個為每個用戶設置的緩存字體資訊的檔案名稱。如果它以"~"開
+始的話，代表一個在用戶主目錄的檔。這個檔是用來保留在為每個目錄設置的緩
+存檔中沒有的字體資訊的。Fontconfig將會自動處理緩存檔。默認的緩存文件是
+"~/.fonts.cache-version"，這裏version是字體配置檔的版本號。（目前是1）。
+
+include ignore_missing="no"
+
+這個單元包含一個附加的配置檔案名稱。當XML資料類型被FcConfigParse掃描處
+理後，這個檔的內容也將會通過傳送檔案名稱到FcConfigLoadAndParse，從而被
+包括在配置中。如果"ignore_missing"設成"yes"而不是默認的"no"的話，一個
+丟失的檔將不會引起函數庫的警告資訊。
+
+config
+
+這個單元提供一個整合附加的配置資訊的地方。config可以按照任意順序包含
+blank和rescan單元。
+
+blank
+
+字體通常包含"破碎"的字型，它們在編碼中存在但在螢幕上卻被繪製成空白。我
+們在blank單元中放置每個預計是空白的unicode字元到int單元中。這些繪製為
+空白的字元將從字體支援的字元集中忽略。
+
+rescan
+
+rescan單元存放一個表示自動掃描字體配置檔變化間隔時間的int單元。每次間
+隔過後，Fontconfig都將驗證所有的配置檔和目錄並且自動重建內部的資料結構。
+
+match target="pattern"
+
+這個單元先存放（可能是空的）test元素列表，然後是一個edit元素列表（也可
+能是空的）。匹配檢測（test元素）條件的樣板將受到edit元素列表的影響。如
+果"target"設定為"font"而不是默認的"pattern"的話，那麼這個單元就將應用
+到一個匹配後的字體名稱，而不是一個需要匹配的字體樣板。
+
+test qual="any" name="property" compare="eq"
+
+這個單元包含一個單獨的值，用來和樣本的屬性"property"比較（可以替換
+property為任意一個上面列出的屬性）。"compare"可以是"eq"（等於），
+"not_eq"（不等於），"less"（小於），"less_eq"（小於等於），"more"（大於），
+"more_eq"（大於等於）。"qual"可以為默認的"any"，在這種情況下，只要任意
+一個之字體屬性符合比較的值，匹配就成功。如果"qual"為"all"的話，只有當
+所有的字體屬性都符合比較的值的時候，匹配才成功。
+
+edit name="property" mode="assign" binding="weak"
+
+這個單元包括一個運算式單元的列表（任何賦值和操作單元）。運算式單元將在
+運行的時候被執行並且將修改屬性"property"。是否修改依賴於"property"的值
+是否匹配相應的test單元。如果匹配的話，這個修改將會影響第一個匹配的值。
+任何插入到屬性的值都可以給出綁定（binding）說明。"mode"可以是以下列表
+其中的一個：
+
+Mode 有匹配條件 沒有匹配條件
+"assign" 替換匹配的值 替換所有值
+"assign_replace" 替換所有值 替換所有值
+"prepend" 在匹配前插入 在列表頭部插入
+"prepend_first" 在列表頭部插入 在列表頭部插入
+"append" 在匹配後添加 在列表底部添加
+"append_last" 在列表底部添加 在列表底部添加
+
+
+int, double, string, bool
+
+這些單元保存單獨一個聲明的類型。bool 單元保存true或者false。在賦浮點數
+的時候有一個重要的限制--fontconfig要求尾數必須以一個數字開始，而不是一
+個小數點，所以應該碰到純小數的時候應該插入一個起始的"0"。（例如用0.5而
+不是.5，-0.5而不是-.5。）
+
+matrix
+
+這個單元保存一個防射變換的四個double元素。
+
+name
+
+保存一個屬性名稱。從字體屬性的第一個值判斷出來的，而不是樣板的第一個值。
+
+const
+
+保存一個常量的名稱。以下這些數值總是整數並且作為一般字體值的字元表達。
+常量 屬性 值
+light weight 0
+medium weight 100
+demibold weight 180
+bold weight 200
+black weight 210
+roman slant 0
+oblique slant 110
+proportional spacing 0
+mono spacing 100
+charcell spacing 110
+unknow rgba 0
+rgb rgba 1
+bgr rgba 2
+vrgb rgba 3
+vbgr rgba 4
+none rgba 5
+
+
+or（與）, and（或）, plus（加）, minus（減）, times（乘）, divide（除）
+
+這些元素在一個表達試列表上執行特定的操作。or和and是布林操作，不是位操作。
+
+eq（等於）, not_eq（不等於）, less（小於）, less_eq（小於等於）,
+more（大於）, more_eq（大於等於）
+
+這些元素比較兩個值，產生一個布林值。
+
+not
+
+對一個運算式的布林值進行"非"操作。
+
+if
+
+這個單元包含三個表達單元。如果第一個單元為真，則產生第二個單元的值，否
+則產生第三個單元的值。
+
+alias
+
+Alias （別名）單元為需要替代一個字體家族名稱到另一個的一套通用匹配操作
+提供簡化符號。它們包含一個family單元，緊跟著是可選的prefer，accept和
+default單元。匹配family單元的字體將被編輯，使得prefer家族在匹配family
+的前面，accept家族在匹配的family後面並且default家族在家族列表的最後。
+
+family
+
+保存一個單獨的字體家族名稱
+
+prefer, accpet, default
+
+這些單元保存一個讓alias單元使用的字體列表。
+
+配置檔舉例
+系統配置檔
+這是一個系統範圍的配置檔例子
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<!-- /etc/fonts/fonts.conf 配置系統自體的檔 -->
+<fontconfig>
+<!--
+在以下目錄尋找字體
+-->
+<dir>/usr/X11R6/lib/X11/fonts/truetype</dir>
+<dir>/usr/X11R6/lib/X11/fonts/Type1</dir>
+
+<!--
+接受不受歡迎的′mono′別名，用′monospace′替代它。
+-->
+<match target="pattern">
+<test qual="any" name="family"><string>mono</string></test>
+<edit name="family" mode="assign"><string>monospace</string></edit>
+</match>
+
+<!--
+沒有使用眾所周知別名的名稱將用′sans′賦值。
+-->
+<match target="pattern">
+<test qual="all" name="family" mode="not_eq">sans</test>
+<test qual="all" name="family" mode="not_eq">serif</test>
+<test qual="all" name="family" mode="not_eq">monospace</test>
+<edit name="family" mode="append_last"><string>sans</string></edit>
+</match>
+
+<!--
+讀入用戶配置檔，如果不存在的話不發出警告資訊。
+-->
+~/.fonts.conf
+
+<!--
+創建眾所周知的字體名稱別名到可用的Truetype字體。
+將Type1字體類別替代為Truetype字體類別可以提高螢幕顯示質量。
+-->
+<alias>
+<family>Times</family>
+<family>Times New Roman</family>
+<default><family>serif</family></default>
+</alias>
+<alias>
+<family>Helvetica</family>
+<family>Verdana</family>
+<default><family>sans</family></default>
+</alias>
+<alias>
+<family>Courier</family>
+<family>Courier New</family>
+<default><family>monospace</family></default>
+</alias>
+
+<!--
+為標準名稱提供所需的別名。
+在用戶檔後面進行可以讓所有的別名都可以使用所推薦的別名。
+-->
+<alias>
+<family>serif</family>
+<family>Times New Roman</family>
+</alias>
+<alias>
+<family>sans</family>
+<family>Verdana</family>
+</alias>
+<alias>
+<family>monospace</family>
+<family>Andale Mono</family>
+</alias>
+</fontconfig>
+
+用戶配置檔
+這是一個以用戶為單位的字體配置檔例子，檔案名為 ~/.fonts.conf
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<!-- ~/.fonts.conf 用戶的字體配置檔 -->
+<fontconfig>
+
+<!--
+用戶字體檔目錄
+-->
+<dir>~/misc/fonts</dir>
+
+<!--
+使用rgb子圖元顯示順序來提高字型在液晶顯示器上的顯示效果。效果會影響渲染，
+但不會影響匹配。記得應該總是使用target="font"。
+-->
+<match target="font">
+<edit name="rgba" mode="assign"><const>rgb</const></edit>
+</match>
+</fontconfig>
+
+
+文件
+fonts.conf 包含了fontconfig函數庫的配置資訊，其中有用來尋找字體
+及相關資訊的目錄名稱，還有在嘗試匹配現有字體前執行的
+字體樣板編輯指令。它使用的是xml格式。
+fonts.dtd 是一個描述配置檔格式的DTD檔。
+~/.fonts.conf 是當前用戶字體配置的默認位置，實際的位置可以在
+fonts.conf檔裏指定。
+~/.fonts.cache-* 是在沒有發現字體目錄中的緩存檔時，在當前用戶目錄存儲
+字體資訊的檔。這個檔是fontconfig自動維護的。
+
+版本號
+Fontconfig version2.2.0
+
+----------------------------------------------------------------------------------------------------

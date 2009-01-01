@@ -1,0 +1,208 @@
+vim:enc=utf8
+----------------------------------------------------------------------------------------------------
+
+* RedHat9 的 Service 啟動順序造成 iptables 無法使用domain name
+	換裝RedHat 9以後，發現一個問題。network服務的啟動順序比iptables還後面，造成了只要用ntsysv設定過要啟動/關閉的服務以後都要重新調整有更動到的runlevel的network服務。以runlevel 5為例，要把/etc/rc.d/rc5.d/S10network改名為/etc/rc.d/rc5.d/S07network （或者任何比8小的數字）。若不做此調整的話會因為啟動iptables時沒有網路可用，無法在/etc/sysconfig/iptables內使用FQDN。
+
+----------------------------------------------------------------------------------------------------
+
+* iptables ruleset
+
+作者: Song (song) 站內: Song
+標題: [測試] iptables ruleset
+時間: Sat May 17 14:44:17 2003
+
+debian 3.0 r1 的 /etc/init.d/iptables 可以這樣用：
+
+1. 先載入你自已的 iptables 設定，可能是個 shell script 之類的，
+本文最後會提供我常用的設定。
+
+2. 測試連線正常後使用下列指令將設定儲存起來：
+
+# /etc/init.d/iptables save_active
+
+這會將 iptables ruleset 存在 /var/lib/iptables/active ,
+這個檔就是 /etc/init.d/iptables 啟動時的預設載入檔。
+
+3. 使用下列的指令建立開關機的相關連結：
+
+# update-rc.d iptbales defaults
+
+4. 下面是我常用單機(單網卡)的設定：
+
+--------------- rc.iptable
+#!/bin/bash
+#
+# FireWall buliding for Song Huang, Since 2002/01/23
+# 防火牆設定
+echo ′iptables set....′
+
+# 變數設定
+ALL="0.0.0.0/0"
+PRI_A_NET="10.0.0.0/8"
+PRI_B_NET="172.16.0.0/12"
+PRI_C_NET="192.168.0.0/16"
+PRI_NET="61.xxx.xxx.0/29" # 請修改
+
+NIC_IF="eth0"
+NIC_IP="61.xxx.xxx.2"
+
+LO="127.0.0.1"
+HI="1024:65535"
+
+# allow_d_port 是指允許連到本地端的 port
+allow_d_port="" # Reset
+allow_d_port=`echo $allow_d_port" 20"` # ftp-data
+allow_d_port=`echo $allow_d_port" 21"` # ftp
+allow_d_port=`echo $allow_d_port" 22"` # ssh
+allow_d_port=`echo $allow_d_port" 25"` # smtp
+allow_d_port=`echo $allow_d_port" 53"` # domain
+allow_d_port=`echo $allow_d_port" 80"` # www
+allow_d_port=`echo $allow_d_port" 113"` # auth
+allow_d_port=`echo $allow_d_port" 443"` # https
+allow_d_port=`echo $allow_d_port" 465"` # ssmtp
+allow_d_port=`echo $allow_d_port" 995"` # pop3s
+allow_d_port=`echo $allow_d_port" 8021"` # zope-ftp
+allow_d_port=`echo $allow_d_port" 8080"` # zope-zmi
+
+# allow_s_port 是指允許連到遠端的 port
+allow_s_port="" # Reset
+allow_s_port=`echo $allow_d_port" 20"` # ftp-data
+allow_s_port=`echo $allow_d_port" 21"` # ftp
+allow_s_port=`echo $allow_d_port" 22"` # ssh
+allow_s_port=`echo $allow_d_port" 25"` # smtp
+allow_s_port=`echo $allow_d_port" 53"` # domain
+allow_s_port=`echo $allow_d_port" 80"` # www
+allow_s_port=`echo $allow_d_port" 113"` # auth
+allow_s_port=`echo $allow_d_port" 443"` # https
+allow_s_port=`echo $allow_d_port" 465"` # ssmtp
+allow_s_port=`echo $allow_d_port" 995"` # pop3s
+allow_s_port=`echo $allow_d_port" 8021"` # zope-ftp
+allow_s_port=`echo $allow_d_port" 8080"` # zope-zmi
+
+
+# 模組啟用
+/sbin/modprobe iptable_filter
+/sbin/modprobe ip_tables
+/sbin/modprobe ip_conntrack
+/sbin/modprobe ip_conntrack_ftp
+/sbin/modprobe ip_conntrack_irc
+/sbin/modprobe ipt_state
+/sbin/modprobe ipt_limit
+/sbin/modprobe ipt_REJECT
+/sbin/modprobe ipt_REDIRECT
+/sbin/modprobe ipt_LOG
+
+# 清除 iptables 設定
+iptables -F
+iptables -X
+iptables -F -t nat
+iptables -X -t nat
+iptables -P INPUT DROP
+iptables -P OUTPUT ACCEPT
+iptables -P FORWARD DROP
+
+# 對內部網路不限制
+iptables -I INPUT -i $NIC_IF -p tcp -s $PRI_NET -j ACCEPT
+iptables -I OUTPUT -o $NIC_IF -p tcp -d $PRI_NET -j ACCEPT
+
+# lo 介面不限制
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A OUTPUT -o lo -j ACCEPT
+
+# 限制聲稱是我自已 IP 的封包
+iptables -A INPUT -i $NIC_IF -s $NIC_IP -d $ALL -j DROP
+
+# 限制使用 port scan 軟體 (ex:nmap) 來掃 port。
+
+## NMAP FIN/URG/PSH
+iptables -A INPUT -i $NIC_IF -p tcp --tcp-flags ALL FIN,URG,PSH -j DROP
+
+## Xmas Tree
+iptables -A INPUT -i $NIC_IF -p tcp --tcp-flags ALL ALL -j DROP
+
+## Another Xmas Tree
+iptables -A INPUT -i $NIC_IF -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j DROP
+
+## Null Scan(possibly)
+iptables -A INPUT -i $NIC_IF -p tcp --tcp-flags ALL NONE -j DROP
+
+## SYN/RST
+iptables -A INPUT -i $NIC_IF -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
+
+## SYN/FIN -- Scan(possibly)
+iptables -A INPUT -i $NIC_IF -p tcp --tcp-flags SYN,FIN SYN,FIN -j DROP
+
+# 定義 chains name
+iptables -N allowed
+iptables -A allowed -p TCP --syn -j ACCEPT
+iptables -A allowed -p TCP -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A allowed -p TCP -j DROP
+
+iptables -N remoteallowed
+iptables -A remoteallowed -p TCP --dport $HI -j ACCEPT
+iptables -A remoteallowed -p TCP -j DROP
+
+# 允許的 icmp 封包
+icmp_type="0 3 5 11"
+iptables -N icmp_packets
+for type in $icmp_type;do
+iptables -A icmp_packets -p ICMP --icmp-type $type -j ACCEPT
+done
+
+# 已定義檔案開頭處，這裡只作備忘。
+# allow_d_port="20 21 22 23 25 53 80 110 113 443 465 995 6667 8021 8080"
+# allow_s_port="20 21 22 23 25 53 80 110 113 443 465 995 6667 8021 8080"
+
+# 允許的 tcp/port 封包
+iptables -N tcp_d_packets
+for port in $allow_d_port;do
+iptables -A tcp_d_packets -p TCP --dport $port -j allowed
+done
+
+iptables -N tcp_s_packets
+for port in $allow_s_port;do
+iptables -A tcp_s_packets -p TCP --sport $port -j remoteallowed
+done
+
+
+# 允許的 udp/port 封包
+iptables -N udp_d_packets
+for port in $allow_d_port;do
+iptables -A udp_d_packets -p UDP --dport $port -j ACCEPT
+done
+
+iptables -N udp_s_packets
+for port in $allow_s_port;do
+iptables -A udp_s_packets -p UDP --sport $port -j ACCEPT
+done
+
+
+# 防止 sync flood :
+iptables -N synfoold
+iptables -A synfoold -p tcp --syn -m limit --limit 3/s -j RETURN
+iptables -A synfoold -p tcp -j REJECT --reject-with tcp-reset
+
+# 防止 Ping of Death :
+iptables -N ping
+iptables -A ping -i $NIC_IF -p icmp --icmp-type echo-request \
+-m limit --limit 3/s -j RETURN
+iptables -A ping -p icmp -j REJECT
+
+# --- IN&OUT PUT Chains Firewall Rules ---
+iptables -A INPUT -p tcp -m state --state NEW -j synfoold
+iptables -A INPUT -p icmp -i $NIC_IF --icmp-type echo-request \
+-m state --state NEW -j ping
+
+iptables -A INPUT -p icmp -i $NIC_IF -d $NIC_IP -j icmp_packets
+
+iptables -A INPUT -p tcp -i $NIC_IF -d $NIC_IP -j tcp_d_packets
+iptables -A INPUT -p udp -i $NIC_IF -d $NIC_IP -j udp_d_packets
+iptables -A INPUT -p tcp -i $NIC_IF -d $NIC_IP -j tcp_s_packets
+iptables -A INPUT -p udp -i $NIC_IF -d $NIC_IP -j udp_s_packets
+
+
+------------------ end
+
+
+----------------------------------------------------------------------------------------------------
